@@ -1728,8 +1728,8 @@ SUBSCRIPTION_TIERS = {
     },
     "starter": {
         "name": "Starter",
-        "price_monthly": 2500.00,
-        "price_yearly": 25000.00,
+        "price_monthly": 5000.00,
+        "price_yearly": 50000.00,
         "features": {
             "transactions_per_month": 200,
             "ai_insights": True,
@@ -1745,8 +1745,8 @@ SUBSCRIPTION_TIERS = {
     },
     "business": {
         "name": "Business",
-        "price_monthly": 7500.00,
-        "price_yearly": 75000.00,
+        "price_monthly": 10000.00,
+        "price_yearly": 100000.00,
         "features": {
             "transactions_per_month": 1000,
             "ai_insights": True,
@@ -1762,8 +1762,8 @@ SUBSCRIPTION_TIERS = {
     },
     "enterprise": {
         "name": "Enterprise",
-        "price_monthly": 25000.00,
-        "price_yearly": 250000.00,
+        "price_monthly": 20000.00,
+        "price_yearly": 200000.00,
         "features": {
             "transactions_per_month": -1,  # Unlimited
             "ai_insights": True,
