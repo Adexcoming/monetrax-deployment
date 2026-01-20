@@ -446,11 +446,12 @@ function DashboardLayout({ children }) {
       {/* Mobile Header */}
       <div className="lg:hidden fixed top-0 left-0 right-0 z-50 glass-header">
         <div className="flex items-center justify-between p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
-              <TrendingUp className="w-4 h-4 text-white" />
-            </div>
-            <span className="font-bold">Monetrax</span>
+          <div className="flex items-center gap-2">
+            <img src="/logo-icon.svg" alt="Monetrax" className="w-8 h-8" />
+            <span className="font-bold">
+              <span className="text-[#1F2A5C] dark:text-white">Mone</span>
+              <span className="text-[#10B981]">trax</span>
+            </span>
           </div>
           <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="p-2">
             {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
