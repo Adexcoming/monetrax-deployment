@@ -1453,6 +1453,7 @@ function ImportCSVModal({ onClose }) {
 
 // ============== ADD TRANSACTION MODAL ==============
 function AddTransactionModal({ onClose }) {
+  const { checkTransactionLimit, promptUpgrade, refreshSubscription } = useSubscription();
   const [formData, setFormData] = useState({
     type: 'income',
     category: 'Sales',
@@ -1483,6 +1484,14 @@ function AddTransactionModal({ onClose }) {
       return;
     }
 
+    // Check transaction limit before submitting
+    const limitCheck = checkTransactionLimit();
+    if (!limitCheck.canAdd) {
+      onClose();
+      promptUpgrade('transaction_limit');
+      return;
+    }
+
     setLoading(true);
     try {
       await api('/api/transactions', {
@@ -1490,9 +1499,16 @@ function AddTransactionModal({ onClose }) {
         body: JSON.stringify({ ...formData, amount: parseFloat(formData.amount) })
       });
       toast.success('Transaction added successfully!');
+      refreshSubscription(); // Refresh usage count
       onClose();
     } catch (error) {
-      toast.error(error.message);
+      // Check if it's a transaction limit error
+      if (error.message?.includes('transaction_limit_exceeded') || error.message?.includes('monthly limit')) {
+        onClose();
+        promptUpgrade('transaction_limit');
+      } else {
+        toast.error(error.message);
+      }
     } finally {
       setLoading(false);
     }
