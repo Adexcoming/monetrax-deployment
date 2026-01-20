@@ -2150,6 +2150,371 @@ function MFASetupModal({ onClose }) {
   );
 }
 
+// ============== SUBSCRIPTION PAGE ==============
+function SubscriptionPage() {
+  const [plans, setPlans] = useState([]);
+  const [currentSubscription, setCurrentSubscription] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [checkoutLoading, setCheckoutLoading] = useState(null);
+  const [billingCycle, setBillingCycle] = useState('monthly');
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    fetchPlansAndSubscription();
+    handleReturnFromStripe();
+  }, []);
+
+  const fetchPlansAndSubscription = async () => {
+    setLoading(true);
+    try {
+      const [plansData, subData] = await Promise.all([
+        api('/api/subscriptions/plans'),
+        api('/api/subscriptions/current')
+      ]);
+      setPlans(plansData.plans);
+      setCurrentSubscription(subData);
+    } catch (error) {
+      console.error('Failed to fetch subscription data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleReturnFromStripe = async () => {
+    const params = new URLSearchParams(location.search);
+    const sessionId = params.get('session_id');
+    const status = params.get('status');
+
+    if (sessionId && status === 'success') {
+      // Poll for payment status
+      let attempts = 0;
+      const maxAttempts = 10;
+      
+      const checkStatus = async () => {
+        try {
+          const result = await api(`/api/subscriptions/checkout/status/${sessionId}`);
+          if (result.payment_status === 'paid' || result.status === 'complete') {
+            toast.success('Payment successful! Your subscription has been activated.');
+            setCurrentSubscription(result.subscription || await api('/api/subscriptions/current'));
+            navigate('/subscription', { replace: true });
+            return true;
+          }
+        } catch (error) {
+          console.error('Status check failed:', error);
+        }
+        return false;
+      };
+
+      const pollStatus = async () => {
+        while (attempts < maxAttempts) {
+          const success = await checkStatus();
+          if (success) return;
+          attempts++;
+          await new Promise(r => setTimeout(r, 2000));
+        }
+        toast.error('Could not verify payment. Please refresh the page.');
+      };
+
+      pollStatus();
+    } else if (status === 'cancelled') {
+      toast.info('Checkout was cancelled');
+      navigate('/subscription', { replace: true });
+    }
+  };
+
+  const handleSubscribe = async (tier) => {
+    if (tier === 'free') return;
+    
+    setCheckoutLoading(tier);
+    try {
+      const result = await api('/api/subscriptions/checkout', {
+        method: 'POST',
+        body: JSON.stringify({
+          tier,
+          billing_cycle: billingCycle,
+          origin_url: window.location.origin
+        })
+      });
+      
+      if (result.checkout_url) {
+        window.location.href = result.checkout_url;
+      }
+    } catch (error) {
+      toast.error(error.message || 'Failed to create checkout session');
+    } finally {
+      setCheckoutLoading(null);
+    }
+  };
+
+  const handleCancelSubscription = async () => {
+    if (!window.confirm('Are you sure you want to cancel your subscription? You will lose access to premium features at the end of your billing period.')) {
+      return;
+    }
+    
+    try {
+      await api('/api/subscriptions/cancel', { method: 'POST' });
+      toast.success('Subscription cancelled. You will retain access until the end of your billing period.');
+      fetchPlansAndSubscription();
+    } catch (error) {
+      toast.error(error.message);
+    }
+  };
+
+  const getTierIcon = (tier) => {
+    switch (tier) {
+      case 'free': return <Zap className="w-6 h-6" />;
+      case 'starter': return <Star className="w-6 h-6" />;
+      case 'business': return <Crown className="w-6 h-6" />;
+      case 'enterprise': return <Users className="w-6 h-6" />;
+      default: return <Zap className="w-6 h-6" />;
+    }
+  };
+
+  const getTierColor = (tier, highlight) => {
+    if (highlight) return 'border-emerald-500 bg-emerald-500/5';
+    switch (tier) {
+      case 'free': return 'border-border';
+      case 'starter': return 'border-blue-500/30';
+      case 'business': return 'border-emerald-500';
+      case 'enterprise': return 'border-purple-500/30';
+      default: return 'border-border';
+    }
+  };
+
+  const getButtonStyle = (tier, isCurrentTier, highlight) => {
+    if (isCurrentTier) return 'bg-secondary text-muted-foreground cursor-not-allowed';
+    if (highlight) return 'btn-primary';
+    if (tier === 'enterprise') return 'bg-purple-500 hover:bg-purple-600 text-white';
+    return 'bg-secondary hover:bg-secondary/80';
+  };
+
+  const featureLabels = {
+    transactions_per_month: 'Transactions/month',
+    ai_insights: 'AI Insights',
+    receipt_ocr: 'Receipt OCR',
+    pdf_reports: 'PDF Reports',
+    csv_export: 'CSV Export',
+    priority_support: 'Priority Support',
+    multi_user: 'Multi-user Access',
+    custom_categories: 'Custom Categories'
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4 lg:p-8 space-y-8" data-testid="subscription-page">
+      {/* Header */}
+      <div className="text-center max-w-2xl mx-auto">
+        <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 flex items-center justify-center mx-auto mb-4">
+          <Crown className="w-8 h-8 text-emerald-500" />
+        </div>
+        <h1 className="text-3xl font-bold mb-2">Choose Your Plan</h1>
+        <p className="text-muted-foreground">
+          Unlock powerful features to grow your business with the right subscription tier.
+        </p>
+      </div>
+
+      {/* Current Subscription Banner */}
+      {currentSubscription && currentSubscription.tier !== 'free' && (
+        <div className="glass rounded-2xl p-6 max-w-4xl mx-auto" data-testid="current-subscription-banner">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                currentSubscription.tier === 'business' ? 'bg-emerald-500/10 text-emerald-500' :
+                currentSubscription.tier === 'enterprise' ? 'bg-purple-500/10 text-purple-500' :
+                'bg-blue-500/10 text-blue-500'
+              }`}>
+                {getTierIcon(currentSubscription.tier)}
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Current Plan</p>
+                <p className="text-xl font-bold">{currentSubscription.tier_name}</p>
+                {currentSubscription.current_period_end && (
+                  <p className="text-xs text-muted-foreground">
+                    {currentSubscription.status === 'cancelling' ? 'Cancels' : 'Renews'} on {new Date(currentSubscription.current_period_end).toLocaleDateString()}
+                  </p>
+                )}
+              </div>
+            </div>
+            {currentSubscription.status !== 'cancelling' && currentSubscription.tier !== 'free' && (
+              <button
+                onClick={handleCancelSubscription}
+                className="text-sm text-red-500 hover:text-red-400 transition-colors"
+                data-testid="cancel-subscription-btn"
+              >
+                Cancel Subscription
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Billing Toggle */}
+      <div className="flex items-center justify-center gap-4">
+        <span className={`text-sm ${billingCycle === 'monthly' ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>Monthly</span>
+        <button
+          onClick={() => setBillingCycle(billingCycle === 'monthly' ? 'yearly' : 'monthly')}
+          className={`relative w-14 h-7 rounded-full transition-colors ${billingCycle === 'yearly' ? 'bg-emerald-500' : 'bg-secondary'}`}
+          data-testid="billing-cycle-toggle"
+        >
+          <div className={`absolute top-1 w-5 h-5 bg-white rounded-full transition-transform ${billingCycle === 'yearly' ? 'translate-x-8' : 'translate-x-1'}`} />
+        </button>
+        <span className={`text-sm ${billingCycle === 'yearly' ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
+          Yearly <span className="text-emerald-500 text-xs">(Save 17%)</span>
+        </span>
+      </div>
+
+      {/* Pricing Cards */}
+      <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto">
+        {plans.map((plan) => {
+          const isCurrentTier = currentSubscription?.tier === plan.tier;
+          const price = billingCycle === 'yearly' ? plan.price_yearly : plan.price_monthly;
+          
+          return (
+            <div
+              key={plan.tier}
+              className={`glass rounded-2xl overflow-hidden border-2 transition-all hover:scale-[1.02] ${getTierColor(plan.tier, plan.highlight)} ${plan.highlight ? 'ring-2 ring-emerald-500/20' : ''}`}
+              data-testid={`plan-card-${plan.tier}`}
+            >
+              {plan.highlight && (
+                <div className="bg-emerald-500 text-white text-center py-2 text-sm font-medium">
+                  Most Popular
+                </div>
+              )}
+              
+              <div className="p-6">
+                {/* Plan Header */}
+                <div className="flex items-center gap-3 mb-4">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                    plan.tier === 'free' ? 'bg-secondary text-muted-foreground' :
+                    plan.tier === 'starter' ? 'bg-blue-500/10 text-blue-500' :
+                    plan.tier === 'business' ? 'bg-emerald-500/10 text-emerald-500' :
+                    'bg-purple-500/10 text-purple-500'
+                  }`}>
+                    {getTierIcon(plan.tier)}
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-lg">{plan.name}</h3>
+                    <p className="text-xs text-muted-foreground">{plan.description}</p>
+                  </div>
+                </div>
+
+                {/* Price */}
+                <div className="mb-6">
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-3xl font-bold">
+                      {price === 0 ? 'Free' : formatCurrency(price)}
+                    </span>
+                    {price > 0 && (
+                      <span className="text-muted-foreground text-sm">/{billingCycle === 'yearly' ? 'year' : 'month'}</span>
+                    )}
+                  </div>
+                  {billingCycle === 'yearly' && price > 0 && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      (₦{Math.round(price / 12).toLocaleString()}/month)
+                    </p>
+                  )}
+                </div>
+
+                {/* Features */}
+                <ul className="space-y-3 mb-6">
+                  {Object.entries(plan.features).map(([feature, value]) => (
+                    <li key={feature} className="flex items-center gap-2 text-sm">
+                      {value === true || value === -1 || value > 0 ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                      ) : (
+                        <X className="w-4 h-4 text-muted-foreground shrink-0" />
+                      )}
+                      <span className={value ? '' : 'text-muted-foreground'}>
+                        {feature === 'transactions_per_month' 
+                          ? value === -1 ? 'Unlimited transactions' : `${value} ${featureLabels[feature]}`
+                          : featureLabels[feature]}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+
+                {/* CTA Button */}
+                <button
+                  onClick={() => handleSubscribe(plan.tier)}
+                  disabled={isCurrentTier || checkoutLoading === plan.tier || plan.tier === 'free'}
+                  className={`w-full py-3 rounded-xl font-medium transition-all flex items-center justify-center gap-2 ${getButtonStyle(plan.tier, isCurrentTier, plan.highlight)}`}
+                  data-testid={`subscribe-btn-${plan.tier}`}
+                >
+                  {checkoutLoading === plan.tier ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Processing...
+                    </>
+                  ) : isCurrentTier ? (
+                    <>
+                      <Check className="w-4 h-4" />
+                      Current Plan
+                    </>
+                  ) : plan.tier === 'free' ? (
+                    'Free Forever'
+                  ) : (
+                    <>
+                      <CreditCard className="w-4 h-4" />
+                      {currentSubscription?.tier === 'free' ? 'Subscribe' : 'Upgrade'}
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* FAQ Section */}
+      <div className="max-w-3xl mx-auto mt-12">
+        <h2 className="text-xl font-bold text-center mb-6">Frequently Asked Questions</h2>
+        <div className="space-y-4">
+          <div className="glass rounded-xl p-4">
+            <h3 className="font-medium mb-2">Can I upgrade or downgrade anytime?</h3>
+            <p className="text-sm text-muted-foreground">Yes! You can upgrade to a higher tier at any time. Downgrades take effect at the end of your current billing period.</p>
+          </div>
+          <div className="glass rounded-xl p-4">
+            <h3 className="font-medium mb-2">What payment methods do you accept?</h3>
+            <p className="text-sm text-muted-foreground">We accept all major credit and debit cards through our secure Stripe payment system.</p>
+          </div>
+          <div className="glass rounded-xl p-4">
+            <h3 className="font-medium mb-2">Is there a free trial?</h3>
+            <p className="text-sm text-muted-foreground">Our Free tier is always available with basic features. Upgrade when you're ready to unlock more powerful tools.</p>
+          </div>
+          <div className="glass rounded-xl p-4">
+            <h3 className="font-medium mb-2">What happens if I cancel?</h3>
+            <p className="text-sm text-muted-foreground">You'll retain access to your paid features until the end of your billing period, then your account will revert to the Free tier.</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Trust Badges */}
+      <div className="flex flex-wrap items-center justify-center gap-6 text-muted-foreground text-sm pt-8">
+        <div className="flex items-center gap-2">
+          <Shield className="w-4 h-4 text-emerald-500" />
+          <span>Secure Payment</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <RefreshCw className="w-4 h-4 text-emerald-500" />
+          <span>Cancel Anytime</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <CreditCard className="w-4 h-4 text-emerald-500" />
+          <span>Powered by Stripe</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ============== PROTECTED ROUTE ==============
 function ProtectedRoute({ children }) {
   const { user, loading, mfaRequired, business } = useAuth();
