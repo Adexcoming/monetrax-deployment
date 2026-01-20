@@ -1051,6 +1051,660 @@ async def get_categories():
     }
 
 
+# ============== RECEIPT OCR ROUTES ==============
+
+@app.post("/api/receipts/scan")
+async def scan_receipt(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    """Scan a receipt image using Google Vision API OCR"""
+    business = await get_user_business(user["user_id"])
+    if not business:
+        raise HTTPException(status_code=400, detail="Please create a business first")
+    
+    # Read file
+    contents = await file.read()
+    
+    # Validate file type
+    if file.content_type not in ["image/jpeg", "image/png", "image/webp", "image/jpg"]:
+        raise HTTPException(status_code=400, detail="Invalid file type. Please upload an image (JPEG, PNG, or WebP)")
+    
+    # Check for Google Vision API key
+    google_vision_key = os.environ.get("GOOGLE_VISION_API_KEY")
+    
+    if google_vision_key:
+        # Use Google Vision API
+        try:
+            import httpx
+            
+            # Encode image to base64
+            image_base64 = base64.b64encode(contents).decode('utf-8')
+            
+            # Call Google Vision API
+            async with httpx.AsyncClient() as http_client:
+                response = await http_client.post(
+                    f"https://vision.googleapis.com/v1/images:annotate?key={google_vision_key}",
+                    json={
+                        "requests": [{
+                            "image": {"content": image_base64},
+                            "features": [{"type": "DOCUMENT_TEXT_DETECTION"}]
+                        }]
+                    },
+                    timeout=30.0
+                )
+                
+                if response.status_code != 200:
+                    raise Exception("Vision API request failed")
+                
+                result = response.json()
+                text_annotations = result.get("responses", [{}])[0].get("fullTextAnnotation", {})
+                extracted_text = text_annotations.get("text", "")
+        except Exception as e:
+            # Fallback to AI-based extraction
+            extracted_text = None
+    else:
+        extracted_text = None
+    
+    # Use AI to parse receipt data (works with or without Vision API)
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        
+        if extracted_text:
+            prompt = f"""Parse this receipt text and extract:
+1. Merchant/Store name
+2. Total amount (in Naira ₦)
+3. Date (if visible)
+4. Individual items with prices
+
+Receipt text:
+{extracted_text}
+
+Return ONLY a JSON object like:
+{{"merchant": "Store Name", "total": 5000, "date": "2026-01-20", "items": [{{"description": "Item 1", "amount": 2500}}, {{"description": "Item 2", "amount": 2500}}], "category_suggestion": "Supplies"}}"""
+        else:
+            # Without OCR, ask user to describe
+            return {
+                "success": False,
+                "message": "Receipt OCR requires Google Vision API key. Please enter transaction details manually.",
+                "ocr_available": False
+            }
+        
+        chat = LlmChat(
+            api_key=os.environ.get("EMERGENT_LLM_KEY"),
+            session_id=f"receipt_{user['user_id']}_{datetime.now().timestamp()}",
+            system_message="You are a receipt parser. Extract structured data from receipt text. Always respond with valid JSON only."
+        ).with_model("openai", "gpt-4o-mini")
+        
+        message = UserMessage(text=prompt)
+        response = await chat.send_message(message)
+        
+        # Parse AI response
+        import json
+        try:
+            response_text = response.strip()
+            if response_text.startswith("```"):
+                response_text = response_text.split("```")[1]
+                if response_text.startswith("json"):
+                    response_text = response_text[4:]
+            parsed = json.loads(response_text)
+            
+            return {
+                "success": True,
+                "ocr_available": True,
+                "extracted_text": extracted_text[:500] if extracted_text else None,
+                "parsed_data": {
+                    "merchant": parsed.get("merchant", "Unknown"),
+                    "total": parsed.get("total", 0),
+                    "date": parsed.get("date"),
+                    "items": parsed.get("items", []),
+                    "category_suggestion": parsed.get("category_suggestion", "Other Expense")
+                }
+            }
+        except:
+            return {
+                "success": True,
+                "ocr_available": True,
+                "extracted_text": extracted_text[:500] if extracted_text else None,
+                "parsed_data": None,
+                "message": "Could not parse receipt. Please enter details manually."
+            }
+    
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Error processing receipt: {str(e)}",
+            "ocr_available": bool(google_vision_key)
+        }
+
+
+# ============== PDF EXPORT ROUTES ==============
+
+@app.get("/api/reports/export/pdf")
+async def export_tax_report_pdf(
+    report_type: str = "income-statement",
+    year: int = None,
+    user: dict = Depends(get_current_user)
+):
+    """Generate PDF tax report"""
+    from fastapi.responses import StreamingResponse
+    
+    business = await get_user_business(user["user_id"])
+    if not business:
+        raise HTTPException(status_code=404, detail="Business not found")
+    
+    current_year = year or datetime.now().year
+    
+    # Get transactions
+    cursor = transactions_collection.find({
+        "business_id": business["business_id"],
+        "date": {"$gte": f"{current_year}-01-01", "$lte": f"{current_year}-12-31"}
+    }, {"_id": 0})
+    transactions = await cursor.to_list(length=10000)
+    
+    # Calculate totals
+    income = sum(t["amount"] for t in transactions if t["type"] == "income")
+    expenses = sum(t["amount"] for t in transactions if t["type"] == "expense")
+    profit = income - expenses
+    
+    vat_collected = sum(t.get("vat_amount", 0) for t in transactions if t["type"] == "income" and t.get("is_taxable"))
+    vat_paid = sum(t.get("vat_amount", 0) for t in transactions if t["type"] == "expense" and t.get("is_taxable"))
+    net_vat = vat_collected - vat_paid
+    income_tax = calculate_income_tax(income)
+    
+    # Group by category
+    income_by_cat = {}
+    expense_by_cat = {}
+    for t in transactions:
+        if t["type"] == "income":
+            income_by_cat[t["category"]] = income_by_cat.get(t["category"], 0) + t["amount"]
+        else:
+            expense_by_cat[t["category"]] = expense_by_cat.get(t["category"], 0) + t["amount"]
+    
+    # Generate PDF
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib import colors
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        from reportlab.lib.units import inch
+        
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=0.5*inch, bottomMargin=0.5*inch)
+        styles = getSampleStyleSheet()
+        story = []
+        
+        # Title
+        title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=18, spaceAfter=20, textColor=colors.HexColor('#10b981'))
+        story.append(Paragraph(f"MONETRAX - Tax Report {current_year}", title_style))
+        story.append(Paragraph(f"<b>{business['business_name']}</b>", styles['Heading2']))
+        story.append(Paragraph(f"Generated: {datetime.now().strftime('%B %d, %Y')}", styles['Normal']))
+        story.append(Spacer(1, 20))
+        
+        # Summary Table
+        summary_data = [
+            ['Description', 'Amount (₦)'],
+            ['Total Revenue', f"{income:,.2f}"],
+            ['Total Expenses', f"{expenses:,.2f}"],
+            ['Gross Profit', f"{profit:,.2f}"],
+            ['', ''],
+            ['VAT Collected (7.5%)', f"{vat_collected:,.2f}"],
+            ['VAT Paid (Credit)', f"({vat_paid:,.2f})"],
+            ['Net VAT Due', f"{net_vat:,.2f}"],
+            ['', ''],
+            ['Estimated Income Tax', f"{income_tax:,.2f}"],
+            ['Total Tax Liability', f"{net_vat + income_tax:,.2f}"],
+            ['', ''],
+            ['Net Profit After Tax', f"{profit - net_vat - income_tax:,.2f}"],
+        ]
+        
+        summary_table = Table(summary_data, colWidths=[3.5*inch, 2*inch])
+        summary_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#10b981')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('ALIGN', (1, 0), (-1, -1), 'RIGHT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('TOPPADDING', (0, 0), (-1, -1), 8),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#ecfdf5')),
+            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ]))
+        story.append(summary_table)
+        story.append(Spacer(1, 30))
+        
+        # Income Breakdown
+        if income_by_cat:
+            story.append(Paragraph("Revenue by Category", styles['Heading3']))
+            income_data = [['Category', 'Amount (₦)']] + [[cat, f"{amt:,.2f}"] for cat, amt in income_by_cat.items()]
+            income_table = Table(income_data, colWidths=[3.5*inch, 2*inch])
+            income_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3b82f6')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('ALIGN', (1, 0), (-1, -1), 'RIGHT'),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                ('FONTSIZE', (0, 0), (-1, -1), 9),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ]))
+            story.append(income_table)
+            story.append(Spacer(1, 20))
+        
+        # Expense Breakdown
+        if expense_by_cat:
+            story.append(Paragraph("Expenses by Category", styles['Heading3']))
+            expense_data = [['Category', 'Amount (₦)']] + [[cat, f"{amt:,.2f}"] for cat, amt in expense_by_cat.items()]
+            expense_table = Table(expense_data, colWidths=[3.5*inch, 2*inch])
+            expense_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#ef4444')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('ALIGN', (1, 0), (-1, -1), 'RIGHT'),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                ('FONTSIZE', (0, 0), (-1, -1), 9),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ]))
+            story.append(expense_table)
+        
+        # Footer
+        story.append(Spacer(1, 40))
+        story.append(Paragraph("This report is generated by Monetrax for tax compliance purposes.", styles['Normal']))
+        story.append(Paragraph(f"TIN: {business.get('tin', 'Not registered')}", styles['Normal']))
+        
+        doc.build(story)
+        buffer.seek(0)
+        
+        return StreamingResponse(
+            buffer,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename=monetrax_tax_report_{current_year}.pdf"}
+        )
+        
+    except ImportError:
+        raise HTTPException(status_code=500, detail="PDF generation not available. Please install reportlab.")
+
+
+# ============== CSV IMPORT/EXPORT ROUTES ==============
+
+@app.post("/api/transactions/import/csv")
+async def import_transactions_csv(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    """Import transactions from CSV file"""
+    import csv
+    
+    business = await get_user_business(user["user_id"])
+    if not business:
+        raise HTTPException(status_code=400, detail="Please create a business first")
+    
+    # Validate file type
+    if not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="Please upload a CSV file")
+    
+    contents = await file.read()
+    decoded = contents.decode('utf-8')
+    
+    # Parse CSV
+    reader = csv.DictReader(io.StringIO(decoded))
+    
+    imported = 0
+    errors = []
+    transactions_to_insert = []
+    
+    for row_num, row in enumerate(reader, start=2):
+        try:
+            # Expected columns: date, type, category, amount, description, is_taxable
+            tx_type = row.get('type', '').lower().strip()
+            if tx_type not in ['income', 'expense']:
+                errors.append(f"Row {row_num}: Invalid type '{tx_type}'")
+                continue
+            
+            amount = float(row.get('amount', 0))
+            if amount <= 0:
+                errors.append(f"Row {row_num}: Invalid amount")
+                continue
+            
+            # Calculate VAT
+            is_taxable = row.get('is_taxable', 'true').lower() in ['true', 'yes', '1']
+            vat_amount = calculate_vat(amount) if is_taxable else 0
+            
+            transaction = {
+                "transaction_id": generate_id("txn"),
+                "business_id": business["business_id"],
+                "type": tx_type,
+                "category": row.get('category', 'Other Income' if tx_type == 'income' else 'Other Expense'),
+                "amount": amount,
+                "description": row.get('description', ''),
+                "date": row.get('date', datetime.now(timezone.utc).strftime("%Y-%m-%d")),
+                "is_taxable": is_taxable,
+                "vat_amount": vat_amount,
+                "payment_method": row.get('payment_method', 'Cash'),
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "imported": True
+            }
+            
+            transactions_to_insert.append(transaction)
+            imported += 1
+            
+        except Exception as e:
+            errors.append(f"Row {row_num}: {str(e)}")
+    
+    # Bulk insert
+    if transactions_to_insert:
+        await transactions_collection.insert_many(transactions_to_insert)
+    
+    return {
+        "success": True,
+        "imported": imported,
+        "errors": errors[:10],  # Return first 10 errors
+        "total_errors": len(errors)
+    }
+
+
+@app.get("/api/transactions/export/csv")
+async def export_transactions_csv(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    user: dict = Depends(get_current_user)
+):
+    """Export transactions to CSV file"""
+    from fastapi.responses import StreamingResponse
+    import csv
+    
+    business = await get_user_business(user["user_id"])
+    if not business:
+        raise HTTPException(status_code=404, detail="Business not found")
+    
+    query = {"business_id": business["business_id"]}
+    if start_date:
+        query["date"] = {"$gte": start_date}
+    if end_date:
+        if "date" in query:
+            query["date"]["$lte"] = end_date
+        else:
+            query["date"] = {"$lte": end_date}
+    
+    cursor = transactions_collection.find(query, {"_id": 0}).sort("date", -1)
+    transactions = await cursor.to_list(length=10000)
+    
+    # Generate CSV
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    # Header
+    writer.writerow(['date', 'type', 'category', 'amount', 'vat_amount', 'description', 'payment_method', 'is_taxable'])
+    
+    # Data
+    for tx in transactions:
+        writer.writerow([
+            tx.get('date', ''),
+            tx.get('type', ''),
+            tx.get('category', ''),
+            tx.get('amount', 0),
+            tx.get('vat_amount', 0),
+            tx.get('description', ''),
+            tx.get('payment_method', ''),
+            tx.get('is_taxable', True)
+        ])
+    
+    output.seek(0)
+    
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=monetrax_transactions_{datetime.now().strftime('%Y%m%d')}.csv"}
+    )
+
+
+# ============== ANALYTICS & CHARTS DATA ==============
+
+@app.get("/api/analytics/charts")
+async def get_charts_data(
+    period: str = "6months",  # 6months, year, all
+    user: dict = Depends(get_current_user)
+):
+    """Get data for charts and graphs"""
+    business = await get_user_business(user["user_id"])
+    if not business:
+        return {"monthly_data": [], "category_breakdown": {"income": {}, "expense": {}}}
+    
+    now = datetime.now(timezone.utc)
+    
+    # Determine date range
+    if period == "6months":
+        months_back = 6
+    elif period == "year":
+        months_back = 12
+    else:
+        months_back = 24
+    
+    # Get all transactions in range
+    start_date = (now - timedelta(days=months_back * 30)).strftime("%Y-%m-%d")
+    
+    cursor = transactions_collection.find({
+        "business_id": business["business_id"],
+        "date": {"$gte": start_date}
+    }, {"_id": 0})
+    transactions = await cursor.to_list(length=10000)
+    
+    # Monthly aggregation
+    monthly_data = {}
+    for tx in transactions:
+        month_key = tx["date"][:7]  # YYYY-MM
+        if month_key not in monthly_data:
+            monthly_data[month_key] = {"month": month_key, "income": 0, "expense": 0, "profit": 0, "vat": 0}
+        
+        if tx["type"] == "income":
+            monthly_data[month_key]["income"] += tx["amount"]
+            monthly_data[month_key]["vat"] += tx.get("vat_amount", 0)
+        else:
+            monthly_data[month_key]["expense"] += tx["amount"]
+        
+        monthly_data[month_key]["profit"] = monthly_data[month_key]["income"] - monthly_data[month_key]["expense"]
+    
+    # Sort by month
+    monthly_list = sorted(monthly_data.values(), key=lambda x: x["month"])
+    
+    # Category breakdown
+    income_by_cat = {}
+    expense_by_cat = {}
+    for tx in transactions:
+        if tx["type"] == "income":
+            income_by_cat[tx["category"]] = income_by_cat.get(tx["category"], 0) + tx["amount"]
+        else:
+            expense_by_cat[tx["category"]] = expense_by_cat.get(tx["category"], 0) + tx["amount"]
+    
+    # Daily trend (last 30 days)
+    thirty_days_ago = (now - timedelta(days=30)).strftime("%Y-%m-%d")
+    daily_data = {}
+    for tx in transactions:
+        if tx["date"] >= thirty_days_ago:
+            day_key = tx["date"]
+            if day_key not in daily_data:
+                daily_data[day_key] = {"date": day_key, "income": 0, "expense": 0}
+            if tx["type"] == "income":
+                daily_data[day_key]["income"] += tx["amount"]
+            else:
+                daily_data[day_key]["expense"] += tx["amount"]
+    
+    daily_list = sorted(daily_data.values(), key=lambda x: x["date"])
+    
+    return {
+        "monthly_data": monthly_list,
+        "daily_data": daily_list,
+        "category_breakdown": {
+            "income": income_by_cat,
+            "expense": expense_by_cat
+        },
+        "totals": {
+            "income": sum(m["income"] for m in monthly_list),
+            "expense": sum(m["expense"] for m in monthly_list),
+            "profit": sum(m["profit"] for m in monthly_list),
+            "vat": sum(m["vat"] for m in monthly_list)
+        }
+    }
+
+
+# ============== ENHANCED AI INSIGHTS WITH LEVELS ==============
+
+class AIInsightRequestV2(BaseModel):
+    query: str
+    level: str = "basic"  # basic, standard, premium
+    include_charts: bool = True
+
+
+@app.post("/api/ai/insights/v2")
+async def get_ai_insights_v2(data: AIInsightRequestV2, user: dict = Depends(get_current_user)):
+    """Enhanced AI insights with levels and chart recommendations"""
+    business = await get_user_business(user["user_id"])
+    if not business:
+        raise HTTPException(status_code=404, detail="Business not found")
+    
+    # Get transactions based on level
+    limit = {"basic": 50, "standard": 100, "premium": 500}.get(data.level, 50)
+    
+    cursor = transactions_collection.find(
+        {"business_id": business["business_id"]},
+        {"_id": 0}
+    ).sort("date", -1).limit(limit)
+    transactions = await cursor.to_list(length=limit)
+    
+    # Calculate comprehensive metrics
+    income = sum(t["amount"] for t in transactions if t["type"] == "income")
+    expenses = sum(t["amount"] for t in transactions if t["type"] == "expense")
+    profit = income - expenses
+    
+    # Category analysis
+    income_by_cat = {}
+    expense_by_cat = {}
+    for t in transactions:
+        if t["type"] == "income":
+            income_by_cat[t["category"]] = income_by_cat.get(t["category"], 0) + t["amount"]
+        else:
+            expense_by_cat[t["category"]] = expense_by_cat.get(t["category"], 0) + t["amount"]
+    
+    # Monthly trend
+    monthly_trend = {}
+    for t in transactions:
+        month = t["date"][:7]
+        if month not in monthly_trend:
+            monthly_trend[month] = {"income": 0, "expense": 0}
+        if t["type"] == "income":
+            monthly_trend[month]["income"] += t["amount"]
+        else:
+            monthly_trend[month]["expense"] += t["amount"]
+    
+    # Top categories
+    top_income_cat = max(income_by_cat.items(), key=lambda x: x[1])[0] if income_by_cat else "N/A"
+    top_expense_cat = max(expense_by_cat.items(), key=lambda x: x[1])[0] if expense_by_cat else "N/A"
+    
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        
+        # Build context based on level
+        level_prompts = {
+            "basic": "Provide a brief 2-3 sentence insight.",
+            "standard": "Provide detailed analysis with 3-5 actionable recommendations.",
+            "premium": """Provide comprehensive analysis including:
+1. Financial health assessment
+2. Tax optimization strategies
+3. Cash flow recommendations
+4. Growth opportunities
+5. Risk factors to watch
+6. Specific action items with timelines"""
+        }
+        
+        system_message = f"""You are an expert Nigerian business financial advisor for MSMEs.
+Use Naira (₦) for all amounts. Consider Nigerian tax laws (7.5% VAT, progressive income tax).
+{level_prompts.get(data.level, level_prompts['basic'])}
+Be specific and actionable. Reference the actual numbers provided."""
+        
+        chat = LlmChat(
+            api_key=os.environ.get("EMERGENT_LLM_KEY"),
+            session_id=f"insights_v2_{user['user_id']}_{datetime.now().timestamp()}",
+            system_message=system_message
+        ).with_model("openai", "gpt-4o-mini")
+        
+        context = f"""Business: {business['business_name']} ({business['industry']})
+TIN Registered: {'Yes' if business.get('tin') else 'No'}
+
+Financial Summary (Last {len(transactions)} transactions):
+- Total Income: ₦{income:,.0f}
+- Total Expenses: ₦{expenses:,.0f}
+- Net Profit: ₦{profit:,.0f}
+- Profit Margin: {(profit/income*100) if income > 0 else 0:.1f}%
+
+Top Revenue Source: {top_income_cat} (₦{income_by_cat.get(top_income_cat, 0):,.0f})
+Top Expense Category: {top_expense_cat} (₦{expense_by_cat.get(top_expense_cat, 0):,.0f})
+
+Monthly Trend: {list(monthly_trend.items())[-3:] if monthly_trend else 'No data'}
+
+User Question: {data.query}"""
+        
+        message = UserMessage(text=context)
+        response = await chat.send_message(message)
+        
+        # Generate chart recommendations based on data
+        chart_recommendations = []
+        if data.include_charts:
+            if len(monthly_trend) >= 3:
+                chart_recommendations.append({
+                    "type": "line",
+                    "title": "Revenue vs Expenses Trend",
+                    "description": "Track your monthly financial performance"
+                })
+            if income_by_cat:
+                chart_recommendations.append({
+                    "type": "pie",
+                    "title": "Revenue by Category",
+                    "description": "See where your money comes from"
+                })
+            if expense_by_cat:
+                chart_recommendations.append({
+                    "type": "bar",
+                    "title": "Expense Breakdown",
+                    "description": "Understand your spending patterns"
+                })
+            if profit != 0:
+                chart_recommendations.append({
+                    "type": "gauge",
+                    "title": "Profit Margin",
+                    "description": "Your current profitability rate"
+                })
+        
+        return {
+            "insight": response,
+            "level": data.level,
+            "metrics": {
+                "income": income,
+                "expenses": expenses,
+                "profit": profit,
+                "profit_margin": round((profit/income*100) if income > 0 else 0, 1),
+                "transaction_count": len(transactions),
+                "vat_collected": sum(t.get("vat_amount", 0) for t in transactions if t["type"] == "income"),
+                "estimated_tax": calculate_income_tax(income)
+            },
+            "category_data": {
+                "income": income_by_cat,
+                "expense": expense_by_cat
+            },
+            "monthly_trend": [{"month": k, **v} for k, v in sorted(monthly_trend.items())],
+            "chart_recommendations": chart_recommendations,
+            "top_insights": {
+                "best_revenue_source": top_income_cat,
+                "highest_expense": top_expense_cat,
+                "months_analyzed": len(monthly_trend)
+            }
+        }
+    
+    except Exception as e:
+        # Fallback response
+        return {
+            "insight": f"Based on your data, your business has ₦{income:,.0f} income and ₦{expenses:,.0f} expenses, resulting in ₦{profit:,.0f} profit.",
+            "level": data.level,
+            "metrics": {
+                "income": income,
+                "expenses": expenses,
+                "profit": profit
+            },
+            "error": str(e)
+        }
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8001)
