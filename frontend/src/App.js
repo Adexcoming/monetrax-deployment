@@ -1211,13 +1211,13 @@ function TransactionsPage() {
       </div>
 
       {/* Add Transaction Modal */}
-      {showAddModal && <AddTransactionModal onClose={() => { setShowAddModal(false); fetchTransactions(); }} />}
+      {showAddModal && <AddTransactionModal onClose={() => { setShowAddModal(false); fetchTransactions(); refreshSubscription(); }} />}
       
       {/* Scan Receipt Modal */}
-      {showScanModal && <ScanReceiptModal onClose={() => { setShowScanModal(false); fetchTransactions(); }} />}
+      {showScanModal && <ScanReceiptModal onClose={() => { setShowScanModal(false); fetchTransactions(); refreshSubscription(); }} />}
       
       {/* Import CSV Modal */}
-      {showImportModal && <ImportCSVModal onClose={() => { setShowImportModal(false); fetchTransactions(); }} />}
+      {showImportModal && <ImportCSVModal onClose={() => { setShowImportModal(false); fetchTransactions(); refreshSubscription(); }} />}
     </div>
   );
 }
