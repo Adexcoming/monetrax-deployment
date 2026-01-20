@@ -2197,6 +2197,72 @@ async def cancel_subscription(user: dict = Depends(get_current_user)):
     }
 
 
+@app.get("/api/subscriptions/usage")
+async def get_subscription_usage(user: dict = Depends(get_current_user)):
+    """Get detailed usage statistics for current subscription"""
+    subscription = await subscriptions_collection.find_one(
+        {"user_id": user["user_id"]},
+        {"_id": 0}
+    )
+    
+    tier = subscription.get("tier", "free") if subscription else "free"
+    tier_data = SUBSCRIPTION_TIERS.get(tier, SUBSCRIPTION_TIERS["free"])
+    
+    business = await get_user_business(user["user_id"])
+    
+    now = datetime.now(timezone.utc)
+    month_start = now.replace(day=1).strftime("%Y-%m-%d")
+    
+    # Calculate usage
+    transactions_this_month = 0
+    total_transactions = 0
+    
+    if business:
+        transactions_this_month = await transactions_collection.count_documents({
+            "business_id": business["business_id"],
+            "date": {"$gte": month_start}
+        })
+        total_transactions = await transactions_collection.count_documents({
+            "business_id": business["business_id"]
+        })
+    
+    tx_limit = tier_data["features"]["transactions_per_month"]
+    
+    # Check if limit exceeded
+    limit_exceeded = tx_limit != -1 and transactions_this_month >= tx_limit
+    
+    # Calculate percentage used
+    usage_percentage = 0
+    if tx_limit > 0:
+        usage_percentage = min(100, round((transactions_this_month / tx_limit) * 100))
+    elif tx_limit == -1:
+        usage_percentage = 0  # Unlimited
+    
+    # Check if user ever had paid subscription
+    had_paid = await payment_transactions_collection.find_one(
+        {"user_id": user["user_id"], "status": "completed"},
+        {"_id": 0}
+    )
+    
+    return {
+        "tier": tier,
+        "tier_name": tier_data["name"],
+        "transactions": {
+            "used": transactions_this_month,
+            "limit": tx_limit,
+            "unlimited": tx_limit == -1,
+            "remaining": max(0, tx_limit - transactions_this_month) if tx_limit != -1 else -1,
+            "usage_percentage": usage_percentage,
+            "limit_exceeded": limit_exceeded
+        },
+        "total_transactions": total_transactions,
+        "features": tier_data["features"],
+        "had_paid_subscription": bool(had_paid),
+        "month_start": month_start,
+        "can_upgrade": tier != "enterprise"
+    }
+
+
 # Feature access helper
 async def check_feature_access(user_id: str, feature: str) -> bool:
     """Check if user has access to a specific feature based on their subscription"""
