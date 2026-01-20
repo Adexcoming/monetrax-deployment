@@ -2376,6 +2376,77 @@ function SettingsPage() {
         </div>
       </div>
 
+      {/* Email Notifications */}
+      <div className="glass rounded-2xl p-6">
+        <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
+          <MessageSquare className="w-5 h-5 text-emerald-500" />
+          Email Notifications
+        </h3>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between p-4 bg-secondary/30 rounded-xl">
+            <div>
+              <p className="font-medium">Tax Deadline Reminders</p>
+              <p className="text-sm text-muted-foreground">Get notified before tax filing deadlines</p>
+            </div>
+            <button
+              onClick={() => setEmailPrefs({ ...emailPrefs, tax_deadline_reminders: !emailPrefs.tax_deadline_reminders })}
+              className={`relative w-12 h-6 rounded-full transition-colors ${emailPrefs.tax_deadline_reminders ? 'bg-emerald-500' : 'bg-secondary'}`}
+              data-testid="toggle-tax-reminders"
+            >
+              <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${emailPrefs.tax_deadline_reminders ? 'translate-x-7' : 'translate-x-1'}`} />
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between p-4 bg-secondary/30 rounded-xl">
+            <div>
+              <p className="font-medium">Subscription Updates</p>
+              <p className="text-sm text-muted-foreground">Billing confirmations and plan changes</p>
+            </div>
+            <button
+              onClick={() => setEmailPrefs({ ...emailPrefs, subscription_updates: !emailPrefs.subscription_updates })}
+              className={`relative w-12 h-6 rounded-full transition-colors ${emailPrefs.subscription_updates ? 'bg-emerald-500' : 'bg-secondary'}`}
+              data-testid="toggle-subscription-updates"
+            >
+              <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${emailPrefs.subscription_updates ? 'translate-x-7' : 'translate-x-1'}`} />
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between p-4 bg-secondary/30 rounded-xl">
+            <div>
+              <p className="font-medium">Weekly Summary</p>
+              <p className="text-sm text-muted-foreground">Weekly digest of your financial activity</p>
+            </div>
+            <button
+              onClick={() => setEmailPrefs({ ...emailPrefs, weekly_summary: !emailPrefs.weekly_summary })}
+              className={`relative w-12 h-6 rounded-full transition-colors ${emailPrefs.weekly_summary ? 'bg-emerald-500' : 'bg-secondary'}`}
+              data-testid="toggle-weekly-summary"
+            >
+              <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${emailPrefs.weekly_summary ? 'translate-x-7' : 'translate-x-1'}`} />
+            </button>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-3 mt-6 pt-4 border-t border-border">
+          <button 
+            onClick={handleSaveEmailPrefs} 
+            disabled={savingPrefs} 
+            className="btn-primary px-4 py-2 rounded-lg text-sm flex items-center gap-2"
+            data-testid="save-email-prefs"
+          >
+            {savingPrefs ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+            Save Preferences
+          </button>
+          <button 
+            onClick={handleSendTaxReminder} 
+            className="bg-secondary hover:bg-secondary/80 px-4 py-2 rounded-lg text-sm flex items-center gap-2"
+            data-testid="send-tax-reminder"
+          >
+            <Calendar className="w-4 h-4" />
+            Send Tax Reminder
+          </button>
+        </div>
+      </div>
+
       {/* MFA Setup Modal */}
       {showMfaSetup && <MFASetupModal onClose={() => { setShowMfaSetup(false); fetchMfaStatus(); checkAuth(); }} />}
     </div>
