@@ -2047,10 +2047,30 @@ function ReportsPage() {
       )}
 
       {/* AI Insights Section */}
-      <div className="glass rounded-2xl p-6">
+      <div className={`glass rounded-2xl p-6 ${!hasAiAccess ? 'relative overflow-hidden' : ''}`}>
+        {!hasAiAccess && (
+          <div className="absolute inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-10">
+            <div className="text-center p-6">
+              <div className="w-12 h-12 rounded-xl bg-purple-500/10 flex items-center justify-center mx-auto mb-3">
+                <Sparkles className="w-6 h-6 text-purple-500" />
+              </div>
+              <h4 className="font-semibold mb-2">AI Insights - Premium Feature</h4>
+              <p className="text-sm text-muted-foreground mb-4">Get intelligent financial advice powered by AI</p>
+              <button 
+                onClick={() => promptUpgrade('ai_insights')}
+                className="btn-primary px-6 py-2 rounded-lg inline-flex items-center gap-2"
+              >
+                <Crown className="w-4 h-4" />
+                Upgrade to Access
+              </button>
+            </div>
+          </div>
+        )}
+        
         <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
           <Sparkles className="w-5 h-5 text-purple-500" />
           AI-Powered Insights
+          {!hasAiAccess && <Crown className="w-4 h-4 text-yellow-500" />}
         </h3>
         
         {/* Level Selector */}
@@ -2080,7 +2100,7 @@ function ReportsPage() {
             type="text"
             value={insightQuery}
             onChange={(e) => setInsightQuery(e.target.value)}
-            placeholder="Ask about your finances... e.g., 'How can I reduce expenses?' or 'What's my tax situation?'"
+            placeholder="Ask about your finances... e.g., 'How can I reduce expenses?' or 'What is my tax situation?'"
             className="flex-1 bg-secondary/50 border border-border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-purple-500"
             onKeyPress={(e) => e.key === 'Enter' && handleGetInsights()}
           />
