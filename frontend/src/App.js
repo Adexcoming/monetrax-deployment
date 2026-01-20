@@ -501,7 +501,13 @@ function MFASetupModal({ onClose, onBackupCodes }) {
 
   useEffect(() => {
     initSetup();
-  }, []);
+    // Handle Escape key
+    const handleEscape = (e) => {
+      if (e.key === 'Escape' && step === 1) onClose();
+    };
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [step, onClose]);
 
   const initSetup = async () => {
     try {
