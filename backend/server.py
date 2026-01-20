@@ -620,6 +620,39 @@ async def create_transaction(data: TransactionCreate, user: dict = Depends(get_c
     if not business:
         raise HTTPException(status_code=400, detail="Please create a business first")
     
+    # Check subscription limits
+    user_id = user["user_id"]
+    subscription = await subscriptions_collection.find_one({"user_id": user_id}, {"_id": 0})
+    tier = subscription.get("tier", "free") if subscription else "free"
+    tier_data = SUBSCRIPTION_TIERS.get(tier, SUBSCRIPTION_TIERS["free"])
+    
+    # Get transaction limit for this tier
+    tx_limit = tier_data["features"]["transactions_per_month"]
+    
+    # If not unlimited (-1), check monthly transaction count
+    if tx_limit != -1:
+        now = datetime.now(timezone.utc)
+        month_start = now.replace(day=1).strftime("%Y-%m-%d")
+        
+        # Count transactions this month
+        monthly_tx_count = await transactions_collection.count_documents({
+            "business_id": business["business_id"],
+            "date": {"$gte": month_start}
+        })
+        
+        if monthly_tx_count >= tx_limit:
+            raise HTTPException(
+                status_code=403, 
+                detail={
+                    "error": "transaction_limit_exceeded",
+                    "message": f"You have reached your monthly limit of {tx_limit} transactions on the {tier_data['name']} plan.",
+                    "current_count": monthly_tx_count,
+                    "limit": tx_limit,
+                    "tier": tier,
+                    "upgrade_required": True
+                }
+            )
+    
     transaction_id = generate_id("txn")
     now = datetime.now(timezone.utc)
     
