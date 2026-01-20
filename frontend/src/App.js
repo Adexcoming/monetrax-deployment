@@ -2233,9 +2233,16 @@ function SettingsPage() {
   const { theme, toggleTheme } = useTheme();
   const [mfaStatus, setMfaStatus] = useState(null);
   const [showMfaSetup, setShowMfaSetup] = useState(false);
+  const [emailPrefs, setEmailPrefs] = useState({
+    tax_deadline_reminders: true,
+    subscription_updates: true,
+    weekly_summary: false
+  });
+  const [savingPrefs, setSavingPrefs] = useState(false);
 
   useEffect(() => {
     fetchMfaStatus();
+    fetchEmailPreferences();
   }, []);
 
   const fetchMfaStatus = async () => {
@@ -2243,6 +2250,43 @@ function SettingsPage() {
       const status = await api('/api/mfa/status');
       setMfaStatus(status);
     } catch {}
+  };
+
+  const fetchEmailPreferences = async () => {
+    try {
+      const data = await api('/api/email/preferences');
+      setEmailPrefs(data);
+    } catch {}
+  };
+
+  const handleSaveEmailPrefs = async () => {
+    setSavingPrefs(true);
+    try {
+      await api('/api/email/preferences', {
+        method: 'PUT',
+        body: JSON.stringify(emailPrefs)
+      });
+      toast.success('Email preferences saved!');
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setSavingPrefs(false);
+    }
+  };
+
+  const handleSendTaxReminder = async () => {
+    try {
+      const result = await api('/api/email/send-tax-reminder', { method: 'POST' });
+      if (result.status === 'success') {
+        toast.success('Tax reminder email sent! Check your inbox.');
+      } else if (result.status === 'skipped') {
+        toast.info(result.reason || 'No upcoming deadlines within 30 days');
+      } else {
+        toast.error('Could not send email - please configure Resend API key');
+      }
+    } catch (error) {
+      toast.error(error.message);
+    }
   };
 
   return (
