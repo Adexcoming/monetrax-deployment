@@ -382,6 +382,7 @@ function DashboardLayout({ children }) {
     { path: '/transactions', icon: Receipt, label: 'Transactions' },
     { path: '/tax', icon: FileText, label: 'Tax' },
     { path: '/reports', icon: BarChart3, label: 'Reports' },
+    { path: '/subscription', icon: Crown, label: 'Subscription' },
     { path: '/settings', icon: Settings, label: 'Settings' },
   ];
 
