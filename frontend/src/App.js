@@ -449,8 +449,8 @@ function DashboardLayout({ children }) {
           <div className="flex items-center gap-2">
             <img src="/logo-icon.svg" alt="Monetrax" className="w-8 h-8" />
             <span className="font-bold">
-              <span className="text-[#1F2A5C] dark:text-white">Mone</span>
-              <span className="text-[#10B981]">trax</span>
+              <span className="text-[#001F4F] dark:text-white">MONE</span>
+              <span className="text-[#22C55E]">TRAX</span>
             </span>
           </div>
           <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="p-2">
