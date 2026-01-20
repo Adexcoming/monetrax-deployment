@@ -943,6 +943,305 @@ function TransactionsPage() {
 
       {/* Add Transaction Modal */}
       {showAddModal && <AddTransactionModal onClose={() => { setShowAddModal(false); fetchTransactions(); }} />}
+      
+      {/* Scan Receipt Modal */}
+      {showScanModal && <ScanReceiptModal onClose={() => { setShowScanModal(false); fetchTransactions(); }} />}
+      
+      {/* Import CSV Modal */}
+      {showImportModal && <ImportCSVModal onClose={() => { setShowImportModal(false); fetchTransactions(); }} />}
+    </div>
+  );
+}
+
+// ============== SCAN RECEIPT MODAL ==============
+function ScanReceiptModal({ onClose }) {
+  const [file, setFile] = useState(null);
+  const [preview, setPreview] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+  const fileInputRef = useRef(null);
+
+  const handleFileChange = (e) => {
+    const selectedFile = e.target.files[0];
+    if (selectedFile) {
+      setFile(selectedFile);
+      const reader = new FileReader();
+      reader.onloadend = () => setPreview(reader.result);
+      reader.readAsDataURL(selectedFile);
+    }
+  };
+
+  const handleScan = async () => {
+    if (!file) return;
+    
+    setLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const response = await fetch(`${API_URL}/api/receipts/scan`, {
+        method: 'POST',
+        credentials: 'include',
+        body: formData
+      });
+      
+      const data = await response.json();
+      setResult(data);
+      
+      if (data.success && data.parsed_data) {
+        toast.success('Receipt scanned successfully!');
+      } else {
+        toast.info(data.message || 'Could not parse receipt');
+      }
+    } catch (error) {
+      toast.error('Scan failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreateTransaction = async () => {
+    if (!result?.parsed_data) return;
+    
+    try {
+      await api('/api/transactions', {
+        method: 'POST',
+        body: JSON.stringify({
+          type: 'expense',
+          category: result.parsed_data.category_suggestion || 'Other Expense',
+          amount: result.parsed_data.total || 0,
+          description: result.parsed_data.merchant || 'Receipt scan',
+          date: result.parsed_data.date || new Date().toISOString().split('T')[0],
+          is_taxable: true
+        })
+      });
+      toast.success('Transaction created!');
+      onClose();
+    } catch (error) {
+      toast.error(error.message);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50" data-testid="scan-receipt-modal">
+      <div className="bg-card border border-border rounded-3xl w-full max-w-md animate-fade-in">
+        <div className="p-6">
+          <div className="text-center mb-6">
+            <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 flex items-center justify-center mx-auto mb-4">
+              <Camera className="w-8 h-8 text-emerald-500" />
+            </div>
+            <h2 className="text-xl font-bold mb-2">Scan Receipt</h2>
+            <p className="text-sm text-muted-foreground">Upload a receipt image to extract transaction data</p>
+          </div>
+
+          {!result ? (
+            <>
+              <div 
+                onClick={() => fileInputRef.current?.click()}
+                className="border-2 border-dashed border-border rounded-xl p-8 text-center cursor-pointer hover:border-emerald-500/50 transition-colors mb-4"
+              >
+                {preview ? (
+                  <img src={preview} alt="Receipt" className="max-h-48 mx-auto rounded-lg" />
+                ) : (
+                  <>
+                    <Upload className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">Click to upload receipt image</p>
+                    <p className="text-xs text-muted-foreground mt-1">JPEG, PNG, WebP supported</p>
+                  </>
+                )}
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleFileChange}
+                className="hidden"
+              />
+
+              <div className="flex gap-3">
+                <button onClick={onClose} className="flex-1 bg-secondary hover:bg-secondary/80 py-3 rounded-xl font-medium">Cancel</button>
+                <button 
+                  onClick={handleScan} 
+                  disabled={!file || loading}
+                  className="flex-1 btn-primary py-3 rounded-xl font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
+                  {loading ? 'Scanning...' : 'Scan Receipt'}
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              {result.parsed_data ? (
+                <div className="space-y-4 mb-6">
+                  <div className="p-4 bg-secondary/30 rounded-xl">
+                    <p className="text-sm text-muted-foreground">Merchant</p>
+                    <p className="font-semibold">{result.parsed_data.merchant}</p>
+                  </div>
+                  <div className="p-4 bg-secondary/30 rounded-xl">
+                    <p className="text-sm text-muted-foreground">Total Amount</p>
+                    <p className="text-2xl font-bold text-emerald-500">{formatCurrency(result.parsed_data.total)}</p>
+                  </div>
+                  {result.parsed_data.date && (
+                    <div className="p-4 bg-secondary/30 rounded-xl">
+                      <p className="text-sm text-muted-foreground">Date</p>
+                      <p className="font-semibold">{result.parsed_data.date}</p>
+                    </div>
+                  )}
+                  <div className="p-4 bg-secondary/30 rounded-xl">
+                    <p className="text-sm text-muted-foreground">Suggested Category</p>
+                    <p className="font-semibold">{result.parsed_data.category_suggestion}</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground mb-6">
+                  <AlertTriangle className="w-12 h-12 mx-auto mb-3 text-yellow-500" />
+                  <p>{result.message || 'Could not parse receipt data'}</p>
+                </div>
+              )}
+
+              <div className="flex gap-3">
+                <button onClick={() => { setResult(null); setFile(null); setPreview(null); }} className="flex-1 bg-secondary hover:bg-secondary/80 py-3 rounded-xl font-medium">
+                  Scan Another
+                </button>
+                {result.parsed_data && (
+                  <button onClick={handleCreateTransaction} className="flex-1 btn-primary py-3 rounded-xl font-medium">
+                    Create Transaction
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============== IMPORT CSV MODAL ==============
+function ImportCSVModal({ onClose }) {
+  const [file, setFile] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+  const fileInputRef = useRef(null);
+
+  const handleImport = async () => {
+    if (!file) return;
+    
+    setLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const response = await fetch(`${API_URL}/api/transactions/import/csv`, {
+        method: 'POST',
+        credentials: 'include',
+        body: formData
+      });
+      
+      const data = await response.json();
+      setResult(data);
+      
+      if (data.success) {
+        toast.success(`Imported ${data.imported} transactions!`);
+      }
+    } catch (error) {
+      toast.error('Import failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50" data-testid="import-csv-modal">
+      <div className="bg-card border border-border rounded-3xl w-full max-w-md animate-fade-in">
+        <div className="p-6">
+          <div className="text-center mb-6">
+            <div className="w-16 h-16 rounded-2xl bg-blue-500/10 flex items-center justify-center mx-auto mb-4">
+              <FileSpreadsheet className="w-8 h-8 text-blue-500" />
+            </div>
+            <h2 className="text-xl font-bold mb-2">Import Transactions</h2>
+            <p className="text-sm text-muted-foreground">Upload a CSV file with your transactions</p>
+          </div>
+
+          {!result ? (
+            <>
+              <div className="bg-secondary/30 rounded-xl p-4 mb-4 text-sm">
+                <p className="font-medium mb-2">CSV Format:</p>
+                <code className="text-xs text-muted-foreground">date,type,category,amount,description,is_taxable</code>
+                <p className="text-xs text-muted-foreground mt-2">Example: 2026-01-20,income,Sales,50000,Product sales,true</p>
+              </div>
+
+              <div 
+                onClick={() => fileInputRef.current?.click()}
+                className="border-2 border-dashed border-border rounded-xl p-8 text-center cursor-pointer hover:border-blue-500/50 transition-colors mb-4"
+              >
+                {file ? (
+                  <div>
+                    <FileSpreadsheet className="w-12 h-12 mx-auto mb-3 text-blue-500" />
+                    <p className="font-medium">{file.name}</p>
+                    <p className="text-xs text-muted-foreground">{(file.size / 1024).toFixed(1)} KB</p>
+                  </div>
+                ) : (
+                  <>
+                    <Upload className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">Click to upload CSV file</p>
+                  </>
+                )}
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv"
+                onChange={(e) => setFile(e.target.files[0])}
+                className="hidden"
+              />
+
+              <div className="flex gap-3">
+                <button onClick={onClose} className="flex-1 bg-secondary hover:bg-secondary/80 py-3 rounded-xl font-medium">Cancel</button>
+                <button 
+                  onClick={handleImport} 
+                  disabled={!file || loading}
+                  className="flex-1 btn-primary py-3 rounded-xl font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                  {loading ? 'Importing...' : 'Import'}
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="text-center py-4 mb-6">
+                {result.imported > 0 ? (
+                  <>
+                    <Check className="w-16 h-16 mx-auto mb-3 text-emerald-500" />
+                    <p className="text-2xl font-bold text-emerald-500">{result.imported}</p>
+                    <p className="text-muted-foreground">transactions imported</p>
+                  </>
+                ) : (
+                  <>
+                    <AlertTriangle className="w-16 h-16 mx-auto mb-3 text-yellow-500" />
+                    <p className="text-muted-foreground">No transactions imported</p>
+                  </>
+                )}
+                
+                {result.errors?.length > 0 && (
+                  <div className="mt-4 text-left bg-red-500/10 rounded-xl p-4 max-h-32 overflow-y-auto">
+                    <p className="text-sm font-medium text-red-500 mb-2">Errors ({result.total_errors}):</p>
+                    {result.errors.map((err, i) => (
+                      <p key={i} className="text-xs text-red-400">{err}</p>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <button onClick={onClose} className="w-full btn-primary py-3 rounded-xl font-medium">
+                Done
+              </button>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
