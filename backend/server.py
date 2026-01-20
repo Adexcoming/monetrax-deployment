@@ -8,6 +8,8 @@ import secrets
 import base64
 import io
 import re
+import asyncio
+import logging
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List
 from decimal import Decimal
@@ -15,13 +17,22 @@ from decimal import Decimal
 import pyotp
 import qrcode
 import httpx
+import resend
 from fastapi import FastAPI, HTTPException, Request, Response, Depends, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, EmailStr
 from motor.motor_asyncio import AsyncIOMotorClient
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Initialize Resend
+resend.api_key = os.environ.get("RESEND_API_KEY")
+SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "onboarding@resend.dev")
 
 app = FastAPI(title="Monetrax API", description="Financial OS for Nigerian MSMEs")
 
