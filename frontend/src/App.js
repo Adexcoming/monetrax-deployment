@@ -131,6 +131,29 @@ const formatCurrency = (amount) => {
   }).format(amount);
 };
 
+// ============== MONETRAX LOGO COMPONENT ==============
+function MonetaxLogo({ size = 'md', showText = true }) {
+  const sizes = { sm: 32, md: 40, lg: 56 };
+  const iconSize = sizes[size] || sizes.md;
+  
+  return (
+    <div className="flex items-center gap-3">
+      <img 
+        src="/logo-icon.svg" 
+        alt="Monetrax" 
+        style={{ width: iconSize, height: iconSize }}
+        className="drop-shadow-sm"
+      />
+      {showText && (
+        <span className="font-bold text-xl tracking-tight">
+          <span className="text-[#1F2A5C] dark:text-white">Mone</span>
+          <span className="text-[#10B981]">trax</span>
+        </span>
+      )}
+    </div>
+  );
+}
+
 // ============== LANDING PAGE ==============
 function LandingPage() {
   const { theme, toggleTheme } = useTheme();
@@ -146,12 +169,7 @@ function LandingPage() {
       {/* Header */}
       <header className="fixed top-0 left-0 right-0 z-50 glass-header">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
-              <TrendingUp className="w-5 h-5 text-white" />
-            </div>
-            <span className="font-bold text-xl tracking-tight">Monetrax</span>
-          </div>
+          <MonetaxLogo />
           <div className="flex items-center gap-4">
             <button onClick={toggleTheme} className="p-2 rounded-lg hover:bg-secondary/50 transition-colors">
               {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
