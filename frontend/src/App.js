@@ -5,11 +5,16 @@ import {
   Shield, Key, Smartphone, Copy, Check, LogOut, Settings, User, ChevronRight, Lock, RefreshCw, 
   AlertTriangle, Eye, EyeOff, TrendingUp, TrendingDown, DollarSign, Receipt, PieChart, 
   Calendar, Plus, FileText, BarChart3, Home, CreditCard, Building2, Sun, Moon, Menu, X,
-  ArrowUpRight, ArrowDownRight, Clock, Target, Lightbulb, MessageSquare, Send, Sparkles
+  ArrowUpRight, ArrowDownRight, Clock, Target, Lightbulb, MessageSquare, Send, Sparkles,
+  Upload, Download, Camera, FileSpreadsheet, Loader2
 } from 'lucide-react';
+import { LineChart, Line, BarChart, Bar, PieChart as RechartsPie, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import './App.css';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
+
+// Chart colors
+const CHART_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
 
 // ============== CONTEXTS ==============
 const AuthContext = createContext(null);
