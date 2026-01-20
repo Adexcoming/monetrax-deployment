@@ -465,6 +465,15 @@ class MonettraxAPITester:
         self.test_tax_summary()
         self.test_income_statement_report()
 
+        # Test new enhanced features
+        print("\n🆕 TESTING NEW ENHANCED FEATURES")
+        self.test_analytics_charts_endpoint()
+        self.test_pdf_export_endpoint()
+        self.test_csv_export_endpoint()
+        self.test_csv_import_endpoint()
+        self.test_receipt_scan_endpoint()
+        self.test_ai_insights_v2_endpoint()
+
         # Print summary
         print("\n" + "=" * 70)
         print(f"📊 MONETRAX API TEST SUMMARY")
