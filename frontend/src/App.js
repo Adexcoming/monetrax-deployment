@@ -674,6 +674,14 @@ function BackupCodesModal({ onClose, codes, setCodes }) {
   const [backupCodes, setBackupCodes] = useState(codes);
   const [showRegenerate, setShowRegenerate] = useState(false);
 
+  useEffect(() => {
+    const handleEscape = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [onClose]);
+
   const regenerateCodes = async () => {
     setLoading(true);
     try {
