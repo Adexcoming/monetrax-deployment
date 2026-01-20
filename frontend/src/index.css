@@ -256,3 +256,107 @@ input:focus, select:focus, textarea:focus {
     color: black;
   }
 }
+
+/* PWA Mobile Styles */
+@supports (padding: env(safe-area-inset-bottom)) {
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .safe-area-top {
+    padding-top: env(safe-area-inset-top);
+  }
+}
+
+/* Standalone mode (installed PWA) */
+@media (display-mode: standalone) {
+  body {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  
+  /* Prevent pull-to-refresh */
+  html {
+    overscroll-behavior-y: contain;
+  }
+}
+
+/* Touch-friendly interactions */
+@media (hover: none) and (pointer: coarse) {
+  .btn-primary:active,
+  button:active {
+    transform: scale(0.98);
+  }
+  
+  /* Larger touch targets */
+  button, 
+  a,
+  input[type="checkbox"],
+  input[type="radio"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  /* Remove hover effects on touch devices */
+  .hover\:scale-\[1\.02\]:hover {
+    transform: none;
+  }
+}
+
+/* Mobile navigation bottom safe area */
+.mobile-nav-safe {
+  padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+}
+
+/* Smooth scrolling for all scrollable containers */
+.scroll-smooth {
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Prevent text selection on UI elements */
+.no-select {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Loading skeleton animation */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--secondary)) 25%,
+    hsl(var(--secondary) / 0.5) 50%,
+    hsl(var(--secondary)) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Offline indicator styles */
+.offline-indicator {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: hsl(var(--destructive));
+  color: white;
+  text-align: center;
+  padding: 8px;
+  font-size: 14px;
+  z-index: 9999;
+}
+
+/* Install banner animation */
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.pwa-banner-enter {
+  animation: slideUp 0.3s ease-out forwards;
+}
