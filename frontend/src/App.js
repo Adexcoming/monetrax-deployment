@@ -146,8 +146,8 @@ function MonetaxLogo({ size = 'md', showText = true }) {
       />
       {showText && (
         <span className="font-bold text-xl tracking-tight">
-          <span className="text-[#1F2A5C] dark:text-white">Mone</span>
-          <span className="text-[#10B981]">trax</span>
+          <span className="text-[#001F4F] dark:text-white">MONE</span>
+          <span className="text-[#22C55E]">TRAX</span>
         </span>
       )}
     </div>
