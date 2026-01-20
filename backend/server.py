@@ -2313,6 +2313,394 @@ async def check_feature(feature: str, user: dict = Depends(get_current_user)):
     }
 
 
+# ============== EMAIL SYSTEM ==============
+
+# Email preferences collection
+email_preferences_collection = db["email_preferences"]
+email_logs_collection = db["email_logs"]
+
+
+class EmailPreferences(BaseModel):
+    tax_deadline_reminders: bool = True
+    subscription_updates: bool = True
+    weekly_summary: bool = False
+
+
+async def send_email(to_email: str, subject: str, html_content: str, email_type: str = "general"):
+    """Send email using Resend API"""
+    if not resend.api_key or resend.api_key == "re_demo_key":
+        logger.warning(f"Resend API key not configured. Email to {to_email} not sent.")
+        return {"status": "skipped", "reason": "API key not configured"}
+    
+    params = {
+        "from": SENDER_EMAIL,
+        "to": [to_email],
+        "subject": subject,
+        "html": html_content
+    }
+    
+    try:
+        email_result = await asyncio.to_thread(resend.Emails.send, params)
+        
+        # Log the email
+        await email_logs_collection.insert_one({
+            "email_id": email_result.get("id"),
+            "to_email": to_email,
+            "subject": subject,
+            "email_type": email_type,
+            "status": "sent",
+            "sent_at": datetime.now(timezone.utc).isoformat()
+        })
+        
+        return {"status": "success", "email_id": email_result.get("id")}
+    except Exception as e:
+        logger.error(f"Failed to send email: {str(e)}")
+        
+        await email_logs_collection.insert_one({
+            "to_email": to_email,
+            "subject": subject,
+            "email_type": email_type,
+            "status": "failed",
+            "error": str(e),
+            "attempted_at": datetime.now(timezone.utc).isoformat()
+        })
+        
+        return {"status": "failed", "error": str(e)}
+
+
+def get_subscription_receipt_html(user_name: str, tier_name: str, amount: float, billing_cycle: str, next_billing_date: str):
+    """Generate HTML template for subscription receipt"""
+    return f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <title>Payment Confirmation - Monetrax</title>
+    </head>
+    <body style="font-family: 'Segoe UI', Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 20px;">
+        <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+            <!-- Header -->
+            <div style="background: linear-gradient(135deg, #001F4F 0%, #003366 100%); padding: 32px; text-align: center;">
+                <h1 style="color: white; margin: 0; font-size: 28px;">
+                    <span style="color: white;">MONE</span><span style="color: #22C55E;">TRAX</span>
+                </h1>
+                <p style="color: #94a3b8; margin-top: 8px; font-size: 14px;">Payment Confirmation</p>
+            </div>
+            
+            <!-- Content -->
+            <div style="padding: 32px;">
+                <div style="text-align: center; margin-bottom: 32px;">
+                    <div style="width: 64px; height: 64px; background: #dcfce7; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 16px;">
+                        <span style="font-size: 32px;">✓</span>
+                    </div>
+                    <h2 style="color: #1f2937; margin: 0 0 8px 0;">Payment Successful!</h2>
+                    <p style="color: #6b7280; margin: 0;">Thank you for your subscription, {user_name}!</p>
+                </div>
+                
+                <!-- Receipt Details -->
+                <div style="background: #f8fafc; border-radius: 12px; padding: 24px; margin-bottom: 24px;">
+                    <h3 style="color: #1f2937; margin: 0 0 16px 0; font-size: 16px;">Subscription Details</h3>
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <tr>
+                            <td style="padding: 8px 0; color: #6b7280;">Plan</td>
+                            <td style="padding: 8px 0; color: #1f2937; text-align: right; font-weight: 600;">{tier_name}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 8px 0; color: #6b7280;">Billing Cycle</td>
+                            <td style="padding: 8px 0; color: #1f2937; text-align: right;">{billing_cycle.capitalize()}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 8px 0; color: #6b7280;">Amount Paid</td>
+                            <td style="padding: 8px 0; color: #22C55E; text-align: right; font-weight: 600;">₦{amount:,.0f}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 8px 0; color: #6b7280;">Next Billing Date</td>
+                            <td style="padding: 8px 0; color: #1f2937; text-align: right;">{next_billing_date}</td>
+                        </tr>
+                    </table>
+                </div>
+                
+                <!-- Features Unlocked -->
+                <div style="background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); border-radius: 12px; padding: 24px; margin-bottom: 24px;">
+                    <h3 style="color: #166534; margin: 0 0 12px 0; font-size: 16px;">🎉 Features Now Unlocked</h3>
+                    <ul style="color: #166534; margin: 0; padding-left: 20px; line-height: 1.8;">
+                        <li>AI-powered financial insights</li>
+                        <li>Receipt OCR scanning</li>
+                        <li>PDF tax report exports</li>
+                        <li>Custom transaction categories</li>
+                    </ul>
+                </div>
+                
+                <!-- CTA -->
+                <div style="text-align: center;">
+                    <a href="https://monetrax.com/dashboard" style="display: inline-block; background: #22C55E; color: white; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600;">Go to Dashboard</a>
+                </div>
+            </div>
+            
+            <!-- Footer -->
+            <div style="background: #f8fafc; padding: 24px; text-align: center; border-top: 1px solid #e5e7eb;">
+                <p style="color: #6b7280; margin: 0 0 8px 0; font-size: 14px;">Need help? Contact us at support@monetrax.com</p>
+                <p style="color: #9ca3af; margin: 0; font-size: 12px;">© 2026 Monetrax. All rights reserved.</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+
+
+def get_tax_deadline_reminder_html(user_name: str, deadlines: list):
+    """Generate HTML template for tax deadline reminder"""
+    deadline_rows = ""
+    for d in deadlines:
+        days_left = d.get("days_until", 0)
+        urgency_color = "#ef4444" if days_left <= 7 else "#f59e0b" if days_left <= 14 else "#22C55E"
+        deadline_rows += f"""
+        <tr>
+            <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">{d.get('name', '')}</td>
+            <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">{d.get('date', '')}</td>
+            <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: right;">
+                <span style="background: {urgency_color}20; color: {urgency_color}; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600;">
+                    {days_left} days left
+                </span>
+            </td>
+        </tr>
+        """
+    
+    return f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <title>Tax Deadline Reminder - Monetrax</title>
+    </head>
+    <body style="font-family: 'Segoe UI', Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 20px;">
+        <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+            <!-- Header -->
+            <div style="background: linear-gradient(135deg, #001F4F 0%, #003366 100%); padding: 32px; text-align: center;">
+                <h1 style="color: white; margin: 0; font-size: 28px;">
+                    <span style="color: white;">MONE</span><span style="color: #22C55E;">TRAX</span>
+                </h1>
+                <p style="color: #94a3b8; margin-top: 8px; font-size: 14px;">Tax Deadline Reminder</p>
+            </div>
+            
+            <!-- Content -->
+            <div style="padding: 32px;">
+                <div style="text-align: center; margin-bottom: 32px;">
+                    <div style="width: 64px; height: 64px; background: #fef3c7; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 16px;">
+                        <span style="font-size: 32px;">📅</span>
+                    </div>
+                    <h2 style="color: #1f2937; margin: 0 0 8px 0;">Upcoming Tax Deadlines</h2>
+                    <p style="color: #6b7280; margin: 0;">Hi {user_name}, here are your upcoming tax obligations:</p>
+                </div>
+                
+                <!-- Deadlines Table -->
+                <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px;">
+                    <thead>
+                        <tr style="background: #f8fafc;">
+                            <th style="padding: 12px; text-align: left; color: #6b7280; font-weight: 600; border-bottom: 2px solid #e5e7eb;">Tax Type</th>
+                            <th style="padding: 12px; text-align: left; color: #6b7280; font-weight: 600; border-bottom: 2px solid #e5e7eb;">Due Date</th>
+                            <th style="padding: 12px; text-align: right; color: #6b7280; font-weight: 600; border-bottom: 2px solid #e5e7eb;">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {deadline_rows}
+                    </tbody>
+                </table>
+                
+                <!-- Tips -->
+                <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-radius: 12px; padding: 24px; margin-bottom: 24px;">
+                    <h3 style="color: #92400e; margin: 0 0 12px 0; font-size: 16px;">💡 Tips for Filing</h3>
+                    <ul style="color: #92400e; margin: 0; padding-left: 20px; line-height: 1.8;">
+                        <li>Ensure all transactions are recorded and categorized</li>
+                        <li>Review your PDF tax report before filing</li>
+                        <li>Keep receipts and documentation for 6 years</li>
+                    </ul>
+                </div>
+                
+                <!-- CTA -->
+                <div style="text-align: center;">
+                    <a href="https://monetrax.com/tax" style="display: inline-block; background: #22C55E; color: white; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600;">View Tax Dashboard</a>
+                </div>
+            </div>
+            
+            <!-- Footer -->
+            <div style="background: #f8fafc; padding: 24px; text-align: center; border-top: 1px solid #e5e7eb;">
+                <p style="color: #6b7280; margin: 0 0 8px 0; font-size: 14px;">Need help? Contact us at support@monetrax.com</p>
+                <p style="color: #9ca3af; margin: 0; font-size: 12px;">© 2026 Monetrax. All rights reserved.</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+
+
+@app.post("/api/email/send-upgrade-receipt")
+async def send_upgrade_receipt(user: dict = Depends(get_current_user)):
+    """Send subscription upgrade receipt email"""
+    subscription = await subscriptions_collection.find_one(
+        {"user_id": user["user_id"]},
+        {"_id": 0}
+    )
+    
+    if not subscription or subscription.get("tier") == "free":
+        raise HTTPException(status_code=400, detail="No active paid subscription found")
+    
+    tier_data = SUBSCRIPTION_TIERS.get(subscription["tier"], SUBSCRIPTION_TIERS["free"])
+    
+    # Calculate amount based on billing cycle
+    billing_cycle = subscription.get("billing_cycle", "monthly")
+    amount = tier_data["price_yearly"] if billing_cycle == "yearly" else tier_data["price_monthly"]
+    
+    # Format next billing date
+    next_billing = subscription.get("current_period_end", "")
+    if next_billing:
+        try:
+            next_billing = datetime.fromisoformat(next_billing.replace("Z", "+00:00")).strftime("%B %d, %Y")
+        except:
+            next_billing = "N/A"
+    
+    html_content = get_subscription_receipt_html(
+        user_name=user.get("name", "Valued Customer"),
+        tier_name=tier_data["name"],
+        amount=amount,
+        billing_cycle=billing_cycle,
+        next_billing_date=next_billing
+    )
+    
+    result = await send_email(
+        to_email=user["email"],
+        subject=f"Payment Confirmation - {tier_data['name']} Plan | Monetrax",
+        html_content=html_content,
+        email_type="subscription_receipt"
+    )
+    
+    return result
+
+
+@app.get("/api/email/preferences")
+async def get_email_preferences(user: dict = Depends(get_current_user)):
+    """Get user's email notification preferences"""
+    prefs = await email_preferences_collection.find_one(
+        {"user_id": user["user_id"]},
+        {"_id": 0}
+    )
+    
+    if not prefs:
+        return {
+            "user_id": user["user_id"],
+            "tax_deadline_reminders": True,
+            "subscription_updates": True,
+            "weekly_summary": False
+        }
+    
+    return prefs
+
+
+@app.put("/api/email/preferences")
+async def update_email_preferences(
+    preferences: EmailPreferences,
+    user: dict = Depends(get_current_user)
+):
+    """Update user's email notification preferences"""
+    await email_preferences_collection.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {
+            "user_id": user["user_id"],
+            "tax_deadline_reminders": preferences.tax_deadline_reminders,
+            "subscription_updates": preferences.subscription_updates,
+            "weekly_summary": preferences.weekly_summary,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }},
+        upsert=True
+    )
+    
+    return {"status": "success", "message": "Email preferences updated"}
+
+
+@app.post("/api/email/send-tax-reminder")
+async def send_tax_deadline_reminder(user: dict = Depends(get_current_user)):
+    """Send tax deadline reminder email to user"""
+    # Check if user has opted in for tax reminders
+    prefs = await email_preferences_collection.find_one(
+        {"user_id": user["user_id"]},
+        {"_id": 0}
+    )
+    
+    if prefs and not prefs.get("tax_deadline_reminders", True):
+        return {"status": "skipped", "reason": "User opted out of tax reminders"}
+    
+    # Get upcoming tax deadlines
+    today = datetime.now(timezone.utc)
+    current_year = today.year
+    
+    # Nigerian tax deadlines
+    all_deadlines = [
+        {"name": "Monthly VAT Return", "date": f"{current_year}-{today.month:02d}-21", "days_until": 0},
+        {"name": "WHT Remittance", "date": f"{current_year}-{today.month:02d}-21", "days_until": 0},
+        {"name": "Annual Tax Return", "date": f"{current_year}-03-31", "days_until": 0},
+        {"name": "Q1 PAYE", "date": f"{current_year}-04-10", "days_until": 0},
+    ]
+    
+    # Calculate days until each deadline and filter upcoming ones
+    upcoming_deadlines = []
+    for d in all_deadlines:
+        try:
+            deadline_date = datetime.strptime(d["date"], "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            days_until = (deadline_date - today).days
+            if 0 <= days_until <= 30:
+                d["days_until"] = days_until
+                d["date"] = deadline_date.strftime("%B %d, %Y")
+                upcoming_deadlines.append(d)
+        except:
+            pass
+    
+    if not upcoming_deadlines:
+        return {"status": "skipped", "reason": "No upcoming deadlines within 30 days"}
+    
+    # Sort by urgency
+    upcoming_deadlines.sort(key=lambda x: x["days_until"])
+    
+    html_content = get_tax_deadline_reminder_html(
+        user_name=user.get("name", "Valued Customer"),
+        deadlines=upcoming_deadlines
+    )
+    
+    result = await send_email(
+        to_email=user["email"],
+        subject="🗓️ Upcoming Tax Deadlines - Don't Miss These! | Monetrax",
+        html_content=html_content,
+        email_type="tax_reminder"
+    )
+    
+    return result
+
+
+@app.post("/api/email/test")
+async def send_test_email(user: dict = Depends(get_current_user)):
+    """Send a test email to verify email configuration"""
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <body style="font-family: Arial, sans-serif; padding: 20px;">
+        <h1 style="color: #22C55E;">Test Email from Monetrax</h1>
+        <p>Hi {user.get('name', 'there')},</p>
+        <p>This is a test email to verify your email notifications are working correctly.</p>
+        <p>If you received this, your email configuration is set up properly! 🎉</p>
+        <p>Best regards,<br>The Monetrax Team</p>
+    </body>
+    </html>
+    """
+    
+    result = await send_email(
+        to_email=user["email"],
+        subject="Test Email - Monetrax",
+        html_content=html_content,
+        email_type="test"
+    )
+    
+    return result
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8001)
