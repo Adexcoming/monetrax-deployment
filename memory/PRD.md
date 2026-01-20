@@ -8,21 +8,15 @@ Build Monetrax - a comprehensive financial operating system for Nigerian MSMEs w
 - AI-powered insights
 - Secure authentication (Google OAuth + MFA)
 - Subscription-based pricing with Stripe integration
+- Email notifications for tax deadlines and billing
 
-## Subscription Tiers (Updated Jan 20, 2026)
+## Subscription Tiers
 | Tier | Monthly | Yearly | Transactions | AI Insights | Receipt OCR | PDF Reports |
 |------|---------|--------|--------------|-------------|-------------|-------------|
 | Free | ₦0 | ₦0 | 50/month | ❌ | ❌ | ❌ |
 | Starter | ₦5,000 | ₦50,000 | 200/month | ✅ | ✅ | ✅ |
 | Business | ₦10,000 | ₦100,000 | 1,000/month | ✅ | ✅ | ✅ |
 | Enterprise | ₦20,000 | ₦200,000 | Unlimited | ✅ | ✅ | ✅ |
-
-## Tier Enforcement Features
-- **Transaction Limits**: Backend enforces monthly limits, returns 403 when exceeded
-- **Feature Gating**: Premium features (AI, OCR, PDF) locked for free tier
-- **Usage Tracking**: Real-time usage stats with progress bars
-- **Upgrade Prompts**: Modal appears when accessing premium features on free tier
-- **Free Trial Prevention**: `had_paid_subscription` flag prevents free tier abuse
 
 ## Architecture
 
@@ -34,8 +28,28 @@ Build Monetrax - a comprehensive financial operating system for Nigerian MSMEs w
 - **AI**: OpenAI GPT via Emergent LLM Key
 - **OCR**: Google Vision API (optional)
 - **Payments**: Stripe via emergentintegrations library
+- **Email**: Resend API
 
-### Collections
+### Refactored Frontend Structure
+```
+/app/frontend/src/
+├── contexts/
+│   ├── AuthContext.js       # Authentication state & API helper
+│   ├── ThemeContext.js      # Light/dark theme management
+│   ├── SubscriptionContext.js # Subscription state & upgrade modal
+│   └── index.js             # Export all contexts
+├── components/
+│   ├── layout/
+│   │   ├── DashboardLayout.js  # Sidebar navigation layout
+│   │   └── index.js
+│   └── pages/
+│       ├── DashboardPage.js    # Dashboard with summary cards
+│       ├── SettingsPage.js     # Settings with email prefs
+│       └── index.js
+└── App.js                   # Main app with routing
+```
+
+### Database Collections
 - `users` - User profiles
 - `user_sessions` - Session tokens
 - `mfa_settings` - TOTP secrets
@@ -45,8 +59,10 @@ Build Monetrax - a comprehensive financial operating system for Nigerian MSMEs w
 - `tax_records` - Tax filing history
 - `subscriptions` - User subscription data
 - `payment_transactions` - Payment history
+- `email_preferences` - User email notification settings
+- `email_logs` - Email send history
 
-## What's Been Implemented
+## What's Been Implemented (Jan 20, 2026)
 
 ### Core Features
 - ✅ Google OAuth + TOTP MFA authentication
@@ -57,49 +73,71 @@ Build Monetrax - a comprehensive financial operating system for Nigerian MSMEs w
 - ✅ Dark/Light theme toggle
 
 ### Enhanced Features
-- ✅ **Receipt OCR Scanning** - Upload receipt images, AI parses data (Gated)
-- ✅ **PDF Tax Report Export** - Professional PDF reports (Gated)
-- ✅ **CSV Import/Export** - Bulk transaction management
-- ✅ **Interactive Charts** - Line, Bar, Pie charts
-- ✅ **AI Insights** - Basic/Standard/Premium levels (Gated)
+- ✅ Receipt OCR Scanning (Gated)
+- ✅ PDF Tax Report Export (Gated)
+- ✅ CSV Import/Export
+- ✅ Interactive Charts
+- ✅ AI Insights (Gated)
 
 ### Subscription System
-- ✅ **4-Tier Model**: Free, Starter, Business, Enterprise
-- ✅ **Stripe Integration**: Secure checkout sessions
-- ✅ **Transaction Limits**: 50/200/1000/Unlimited per month
-- ✅ **Feature Gating**: AI, OCR, PDF locked for free tier
-- ✅ **Usage Banner**: Progress bar showing transactions used
-- ✅ **Upgrade Modal**: Prompts when accessing premium features
-- ✅ **Crown Icons**: Visual indicators on premium features
-- ✅ **Free Trial Prevention**: Tracks paid subscription history
+- ✅ 4-Tier Model with Stripe
+- ✅ Transaction Limits enforcement
+- ✅ Feature Gating
+- ✅ Usage Banner & Upgrade Modals
+- ✅ Free Trial Prevention
+
+### Email Notification System (NEW)
+- ✅ **Email Preferences API**: GET/PUT /api/email/preferences
+- ✅ **Tax Deadline Reminders**: Professional HTML emails with upcoming deadlines
+- ✅ **Subscription Receipts**: Automatic email on successful upgrade
+- ✅ **Test Email**: /api/email/test for configuration verification
+- ✅ **Frontend Settings**: Toggle switches for notifications
+- ✅ **Email Logs**: Tracking sent emails in database
+
+### Frontend Refactoring (NEW)
+- ✅ Created `/contexts/` directory with AuthContext, ThemeContext, SubscriptionContext
+- ✅ Created `/components/pages/` with DashboardPage, SettingsPage
+- ✅ Created `/components/layout/` with DashboardLayout
+- ✅ Settings page now includes Email Notifications section
 
 ## API Endpoints
+
+### Email System (NEW)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | /api/email/preferences | Get user email preferences |
+| PUT | /api/email/preferences | Update email preferences |
+| POST | /api/email/send-tax-reminder | Send tax deadline reminder |
+| POST | /api/email/send-upgrade-receipt | Send subscription receipt |
+| POST | /api/email/test | Send test email |
 
 ### Subscriptions
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | /api/subscriptions/plans | Get all tiers with pricing |
-| GET | /api/subscriptions/current | Get subscription with usage stats |
-| GET | /api/subscriptions/usage | Detailed usage (limit_exceeded flag) |
-| POST | /api/subscriptions/checkout | Create Stripe checkout session |
-| GET | /api/subscriptions/checkout/status/{id} | Check payment status |
-| GET | /api/subscriptions/feature-check/{feature} | Check feature access |
+| GET | /api/subscriptions/plans | Get all tiers |
+| GET | /api/subscriptions/current | Get subscription with usage |
+| GET | /api/subscriptions/usage | Detailed usage stats |
+| POST | /api/subscriptions/checkout | Create Stripe checkout |
+| GET | /api/subscriptions/checkout/status/{id} | Check payment & send receipt |
 | POST | /api/subscriptions/cancel | Cancel subscription |
-| POST | /api/webhooks/stripe | Stripe webhook handler |
-
-### Other Endpoints
-- Authentication: /api/auth/session, /api/auth/me, /api/auth/logout
-- MFA: /api/mfa/totp/setup, /api/mfa/totp/verify, /api/mfa/status
-- Business: /api/business (POST/GET/PATCH)
-- Transactions: /api/transactions (POST/GET/DELETE)
-- Tax: /api/summary, /api/tax/summary, /api/tax/calendar
-- Reports: /api/reports/income-statement, /api/reports/export/pdf
-- AI: /api/ai/insights/v2, /api/ai/categorize
-- OCR: /api/receipts/scan
 
 ## Testing Results (Jan 20, 2026)
-- Backend: 100% (44 tests passed)
-- Frontend: 100% (25 UI tests passed)
+- Backend Email Tests: 100% (19/19 passed)
+- Frontend UI Tests: 100% (13/13 passed)
+- Total: 100% success rate
+
+## Configuration Required
+
+### Backend .env
+```
+MONGO_URL=mongodb://localhost:27017
+DB_NAME=monetrax_db
+JWT_SECRET=your-secret
+EMERGENT_LLM_KEY=sk-emergent-xxx
+STRIPE_API_KEY=sk_test_xxx
+RESEND_API_KEY=re_xxx  # Get from resend.com
+SENDER_EMAIL=your-verified@domain.com
+```
 
 ## Prioritized Backlog
 
@@ -114,20 +152,22 @@ Build Monetrax - a comprehensive financial operating system for Nigerian MSMEs w
 - ✅ AI Insights
 - ✅ Subscription System with Stripe
 - ✅ Tier Enforcement
+- ✅ Email Notifications
+- ✅ Frontend Refactoring (started)
 
 ### P1 - High Priority (Next)
-- Frontend refactoring (break down App.js)
+- Complete frontend refactoring (migrate remaining pages)
 - WhatsApp integration for transaction recording
-- Email notifications for tax deadlines
+- Scheduled email reminders (cron job)
 - Invoice generation
 
 ### P2 - Medium Priority
 - Multi-currency support
 - Bank statement parsing
 - Recurring transactions
-- Database query optimization (pagination)
+- Database query optimization
 
 ### P3 - Nice to Have
 - Pidgin language support
 - Mobile app (React Native)
-- Multi-user business accounts (Enterprise tier)
+- Multi-user business accounts
