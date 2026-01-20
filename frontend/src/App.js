@@ -2487,11 +2487,11 @@ function SubscriptionPage() {
           </div>
           <div className="glass rounded-xl p-4">
             <h3 className="font-medium mb-2">Is there a free trial?</h3>
-            <p className="text-sm text-muted-foreground">Our Free tier is always available with basic features. Upgrade when you're ready to unlock more powerful tools.</p>
+            <p className="text-sm text-muted-foreground">Our Free tier is always available with basic features. Upgrade when you are ready to unlock more powerful tools.</p>
           </div>
           <div className="glass rounded-xl p-4">
             <h3 className="font-medium mb-2">What happens if I cancel?</h3>
-            <p className="text-sm text-muted-foreground">You'll retain access to your paid features until the end of your billing period, then your account will revert to the Free tier.</p>
+            <p className="text-sm text-muted-foreground">You will retain access to your paid features until the end of your billing period, then your account will revert to the Free tier.</p>
           </div>
         </div>
       </div>
