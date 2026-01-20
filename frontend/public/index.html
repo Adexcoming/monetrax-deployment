@@ -2,18 +2,236 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <link rel="icon" href="%PUBLIC_URL%/logo-icon.svg" />
-    <link rel="apple-touch-icon" href="%PUBLIC_URL%/monetrax-logo.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#001F4F" />
-    <meta name="description" content="Monetrax - Your Personal Tax Assistant & Business Coach. Simplify bookkeeping and tax compliance for Nigerian MSMEs." />
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Primary Meta Tags -->
     <title>MONETRAX - Financial OS for Nigerian MSMEs</title>
+    <meta name="title" content="MONETRAX - Financial OS for Nigerian MSMEs" />
+    <meta name="description" content="Your Personal Tax Assistant & Business Coach. Simplify bookkeeping and tax compliance for Nigerian MSMEs. Track transactions, calculate VAT, and stay NRS-ready." />
+    <meta name="keywords" content="tax, accounting, bookkeeping, Nigeria, MSME, VAT, financial, business, NRS" />
+    <meta name="author" content="Monetrax" />
+    
+    <!-- Viewport & Mobile -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Monetrax" />
+    <meta name="application-name" content="Monetrax" />
+    
+    <!-- Theme Colors -->
+    <meta name="theme-color" content="#001F4F" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="msapplication-TileColor" content="#001F4F" />
+    <meta name="msapplication-navbutton-color" content="#001F4F" />
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+    
+    <!-- Favicons & Icons -->
+    <link rel="icon" type="image/svg+xml" href="%PUBLIC_URL%/logo-icon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="%PUBLIC_URL%/icons/icon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="%PUBLIC_URL%/icons/icon-16x16.png" />
+    <link rel="apple-touch-icon" href="%PUBLIC_URL%/icons/icon-192x192.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="%PUBLIC_URL%/icons/icon-152x152.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="%PUBLIC_URL%/icons/icon-180x180.png" />
+    <link rel="apple-touch-icon" sizes="167x167" href="%PUBLIC_URL%/icons/icon-167x167.png" />
+    
+    <!-- Splash Screens for iOS -->
+    <link rel="apple-touch-startup-image" href="%PUBLIC_URL%/splash/apple-splash-2048-2732.png" media="(device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" href="%PUBLIC_URL%/splash/apple-splash-1668-2388.png" media="(device-width: 834px) and (device-height: 1194px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" href="%PUBLIC_URL%/splash/apple-splash-1536-2048.png" media="(device-width: 768px) and (device-height: 1024px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" href="%PUBLIC_URL%/splash/apple-splash-1125-2436.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" href="%PUBLIC_URL%/splash/apple-splash-1242-2688.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" href="%PUBLIC_URL%/splash/apple-splash-828-1792.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" href="%PUBLIC_URL%/splash/apple-splash-1242-2208.png" media="(device-width: 414px) and (device-height: 736px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" href="%PUBLIC_URL%/splash/apple-splash-750-1334.png" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" href="%PUBLIC_URL%/splash/apple-splash-640-1136.png" media="(device-width: 320px) and (device-height: 568px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://monetrax.com/" />
+    <meta property="og:title" content="MONETRAX - Financial OS for Nigerian MSMEs" />
+    <meta property="og:description" content="Your Personal Tax Assistant & Business Coach. Simplify bookkeeping and tax compliance for Nigerian MSMEs." />
+    <meta property="og:image" content="%PUBLIC_URL%/og-image.png" />
+    
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:url" content="https://monetrax.com/" />
+    <meta property="twitter:title" content="MONETRAX - Financial OS for Nigerian MSMEs" />
+    <meta property="twitter:description" content="Your Personal Tax Assistant & Business Coach. Simplify bookkeeping and tax compliance for Nigerian MSMEs." />
+    <meta property="twitter:image" content="%PUBLIC_URL%/og-image.png" />
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+    
+    <!-- Preload critical assets -->
+    <link rel="preload" href="%PUBLIC_URL%/logo.svg" as="image" />
+    
+    <style>
+      /* Critical CSS for initial load */
+      html { scroll-behavior: smooth; }
+      body { 
+        margin: 0; 
+        font-family: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        background: #0a0a0a;
+      }
+      #root { min-height: 100vh; }
+      
+      /* PWA Install Banner styles */
+      .pwa-install-banner {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: linear-gradient(135deg, #001F4F 0%, #003366 100%);
+        padding: 16px 20px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        z-index: 9999;
+        box-shadow: 0 -4px 20px rgba(0,0,0,0.3);
+        transform: translateY(100%);
+        transition: transform 0.3s ease;
+      }
+      .pwa-install-banner.show { transform: translateY(0); }
+      .pwa-install-banner .content {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        color: white;
+      }
+      .pwa-install-banner .icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+        background: rgba(255,255,255,0.1);
+      }
+      .pwa-install-banner .text h4 {
+        margin: 0;
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .pwa-install-banner .text p {
+        margin: 4px 0 0;
+        font-size: 12px;
+        opacity: 0.8;
+      }
+      .pwa-install-banner .btn-install {
+        background: #22C55E;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 8px;
+        font-weight: 600;
+        font-size: 14px;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .pwa-install-banner .btn-close {
+        background: transparent;
+        border: none;
+        color: white;
+        opacity: 0.6;
+        cursor: pointer;
+        padding: 8px;
+      }
+      
+      /* Safe area padding for notched devices */
+      @supports (padding: env(safe-area-inset-bottom)) {
+        .pwa-install-banner {
+          padding-bottom: calc(16px + env(safe-area-inset-bottom));
+        }
+      }
+    </style>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
     <div id="root"></div>
+    
+    <!-- PWA Install Banner (hidden by default) -->
+    <div id="pwa-install-banner" class="pwa-install-banner">
+      <div class="content">
+        <img src="%PUBLIC_URL%/logo-icon.svg" alt="Monetrax" class="icon" />
+        <div class="text">
+          <h4>Install Monetrax</h4>
+          <p>Add to home screen for quick access</p>
+        </div>
+      </div>
+      <button class="btn-install" id="pwa-install-btn">Install</button>
+      <button class="btn-close" id="pwa-close-btn">✕</button>
+    </div>
+    
+    <script>
+      // Register Service Worker
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/service-worker.js')
+            .then((registration) => {
+              console.log('SW registered:', registration.scope);
+            })
+            .catch((error) => {
+              console.log('SW registration failed:', error);
+            });
+        });
+      }
+      
+      // PWA Install Prompt
+      let deferredPrompt;
+      const installBanner = document.getElementById('pwa-install-banner');
+      const installBtn = document.getElementById('pwa-install-btn');
+      const closeBtn = document.getElementById('pwa-close-btn');
+      
+      window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        
+        // Check if user previously dismissed
+        const dismissed = localStorage.getItem('pwa-install-dismissed');
+        if (!dismissed) {
+          setTimeout(() => {
+            installBanner.classList.add('show');
+          }, 3000);
+        }
+      });
+      
+      if (installBtn) {
+        installBtn.addEventListener('click', async () => {
+          if (!deferredPrompt) return;
+          
+          deferredPrompt.prompt();
+          const { outcome } = await deferredPrompt.userChoice;
+          
+          if (outcome === 'accepted') {
+            console.log('User accepted install');
+          }
+          
+          deferredPrompt = null;
+          installBanner.classList.remove('show');
+        });
+      }
+      
+      if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+          installBanner.classList.remove('show');
+          localStorage.setItem('pwa-install-dismissed', 'true');
+        });
+      }
+      
+      // Hide banner if already installed
+      window.addEventListener('appinstalled', () => {
+        installBanner.classList.remove('show');
+        deferredPrompt = null;
+      });
+      
+      // Check if running as installed PWA
+      if (window.matchMedia('(display-mode: standalone)').matches) {
+        console.log('Running as PWA');
+      }
+    </script>
   </body>
 </html>
