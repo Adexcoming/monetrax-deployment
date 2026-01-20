@@ -6,7 +6,8 @@ import {
   AlertTriangle, Eye, EyeOff, TrendingUp, TrendingDown, DollarSign, Receipt, PieChart, 
   Calendar, Plus, FileText, BarChart3, Home, CreditCard, Building2, Sun, Moon, Menu, X,
   ArrowUpRight, ArrowDownRight, Clock, Target, Lightbulb, MessageSquare, Send, Sparkles,
-  Upload, Download, Camera, FileSpreadsheet, Loader2, Crown, Zap, Users, Star, CheckCircle2
+  Upload, Download, Camera, FileSpreadsheet, Loader2, Crown, Zap, Users, Star, CheckCircle2,
+  Wifi, WifiOff, Share2
 } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart as RechartsPie, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import './App.css';
@@ -15,6 +16,164 @@ const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 // Chart colors
 const CHART_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
+
+// ============== PWA HOOKS & COMPONENTS ==============
+const usePWA = () => {
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [isInstalled, setIsInstalled] = useState(false);
+  const [isInstallable, setIsInstallable] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+
+  useEffect(() => {
+    // Check if already installed
+    if (window.matchMedia('(display-mode: standalone)').matches) {
+      setIsInstalled(true);
+    }
+
+    // Online/offline status
+    const handleOnline = () => {
+      setIsOnline(true);
+      toast.success('Back online!');
+    };
+    const handleOffline = () => {
+      setIsOnline(false);
+      toast.error('You are offline');
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    // Install prompt
+    const handleBeforeInstall = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setIsInstallable(true);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+
+    // App installed
+    const handleAppInstalled = () => {
+      setIsInstalled(true);
+      setIsInstallable(false);
+      setDeferredPrompt(null);
+    };
+
+    window.addEventListener('appinstalled', handleAppInstalled);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+    };
+  }, []);
+
+  const installApp = async () => {
+    if (!deferredPrompt) return false;
+    
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    
+    if (outcome === 'accepted') {
+      setIsInstallable(false);
+      setDeferredPrompt(null);
+      return true;
+    }
+    return false;
+  };
+
+  return { isOnline, isInstalled, isInstallable, installApp };
+};
+
+// Network Status Indicator
+function NetworkStatus() {
+  const { isOnline } = usePWA();
+  const [show, setShow] = useState(false);
+
+  useEffect(() => {
+    if (!isOnline) {
+      setShow(true);
+    } else {
+      // Hide after a delay when back online
+      const timer = setTimeout(() => setShow(false), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [isOnline]);
+
+  if (!show && isOnline) return null;
+
+  return (
+    <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full flex items-center gap-2 text-sm font-medium transition-all ${
+      isOnline ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white'
+    }`}>
+      {isOnline ? (
+        <>
+          <Wifi className="w-4 h-4" />
+          Back Online
+        </>
+      ) : (
+        <>
+          <WifiOff className="w-4 h-4" />
+          You are offline
+        </>
+      )}
+    </div>
+  );
+}
+
+// PWA Install Prompt Component
+function PWAInstallPrompt() {
+  const { isInstallable, isInstalled, installApp } = usePWA();
+  const [dismissed, setDismissed] = useState(() => {
+    return localStorage.getItem('pwa-prompt-dismissed') === 'true';
+  });
+
+  const handleInstall = async () => {
+    const success = await installApp();
+    if (success) {
+      toast.success('App installed successfully!');
+    }
+  };
+
+  const handleDismiss = () => {
+    setDismissed(true);
+    localStorage.setItem('pwa-prompt-dismissed', 'true');
+  };
+
+  if (isInstalled || !isInstallable || dismissed) return null;
+
+  return (
+    <div className="fixed bottom-20 left-4 right-4 sm:left-auto sm:right-4 sm:w-80 glass rounded-2xl p-4 shadow-2xl z-50 animate-fade-in border border-emerald-500/20" data-testid="pwa-install-prompt">
+      <div className="flex items-start gap-3">
+        <div className="w-12 h-12 rounded-xl bg-emerald-500/10 flex items-center justify-center flex-shrink-0">
+          <Share2 className="w-6 h-6 text-emerald-500" />
+        </div>
+        <div className="flex-1">
+          <h4 className="font-semibold text-sm">Install Monetrax</h4>
+          <p className="text-xs text-muted-foreground mt-1">Add to your home screen for quick access and offline support</p>
+          <div className="flex gap-2 mt-3">
+            <button 
+              onClick={handleInstall}
+              className="btn-primary px-3 py-1.5 rounded-lg text-xs font-medium"
+            >
+              Install
+            </button>
+            <button 
+              onClick={handleDismiss}
+              className="bg-secondary px-3 py-1.5 rounded-lg text-xs font-medium"
+            >
+              Not now
+            </button>
+          </div>
+        </div>
+        <button onClick={handleDismiss} className="text-muted-foreground hover:text-foreground">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
 
 // ============== CONTEXTS ==============
 const AuthContext = createContext(null);
