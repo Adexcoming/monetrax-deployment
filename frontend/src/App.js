@@ -1142,7 +1142,12 @@ function TransactionsPage() {
             <Download className="w-4 h-4" />
             Export
           </button>
-          <button onClick={() => setShowAddModal(true)} className="btn-primary px-4 py-2 rounded-lg inline-flex items-center gap-2 text-sm" data-testid="add-transaction-btn">
+          <button 
+            onClick={handleAddTransaction} 
+            disabled={isAtLimit}
+            className={`btn-primary px-4 py-2 rounded-lg inline-flex items-center gap-2 text-sm ${isAtLimit ? 'opacity-50 cursor-not-allowed' : ''}`} 
+            data-testid="add-transaction-btn"
+          >
             <Plus className="w-4 h-4" />
             Add Transaction
           </button>
@@ -1174,7 +1179,7 @@ function TransactionsPage() {
           <div className="p-8 text-center text-muted-foreground">
             <Receipt className="w-12 h-12 mx-auto mb-3 opacity-50" />
             <p>No transactions found</p>
-            <button onClick={() => setShowAddModal(true)} className="text-emerald-500 text-sm hover:underline mt-2">
+            <button onClick={handleAddTransaction} className="text-emerald-500 text-sm hover:underline mt-2">
               Add your first transaction
             </button>
           </div>
