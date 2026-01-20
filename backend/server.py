@@ -1705,6 +1705,477 @@ User Question: {data.query}"""
         }
 
 
+# ============== SUBSCRIPTION SYSTEM ==============
+
+# Subscription tier configurations
+SUBSCRIPTION_TIERS = {
+    "free": {
+        "name": "Free",
+        "price_monthly": 0,
+        "price_yearly": 0,
+        "features": {
+            "transactions_per_month": 50,
+            "ai_insights": False,
+            "receipt_ocr": False,
+            "pdf_reports": False,
+            "csv_export": True,
+            "priority_support": False,
+            "multi_user": False,
+            "custom_categories": False
+        },
+        "description": "Perfect for getting started",
+        "highlight": False
+    },
+    "starter": {
+        "name": "Starter",
+        "price_monthly": 2500.00,
+        "price_yearly": 25000.00,
+        "features": {
+            "transactions_per_month": 200,
+            "ai_insights": True,
+            "receipt_ocr": True,
+            "pdf_reports": True,
+            "csv_export": True,
+            "priority_support": False,
+            "multi_user": False,
+            "custom_categories": True
+        },
+        "description": "Great for small businesses",
+        "highlight": False
+    },
+    "business": {
+        "name": "Business",
+        "price_monthly": 7500.00,
+        "price_yearly": 75000.00,
+        "features": {
+            "transactions_per_month": 1000,
+            "ai_insights": True,
+            "receipt_ocr": True,
+            "pdf_reports": True,
+            "csv_export": True,
+            "priority_support": True,
+            "multi_user": False,
+            "custom_categories": True
+        },
+        "description": "Most popular for growing businesses",
+        "highlight": True
+    },
+    "enterprise": {
+        "name": "Enterprise",
+        "price_monthly": 25000.00,
+        "price_yearly": 250000.00,
+        "features": {
+            "transactions_per_month": -1,  # Unlimited
+            "ai_insights": True,
+            "receipt_ocr": True,
+            "pdf_reports": True,
+            "csv_export": True,
+            "priority_support": True,
+            "multi_user": True,
+            "custom_categories": True
+        },
+        "description": "For large organizations",
+        "highlight": False
+    }
+}
+
+# Subscription collection
+subscriptions_collection = db["subscriptions"]
+payment_transactions_collection = db["payment_transactions"]
+
+
+class SubscriptionPlan(BaseModel):
+    tier: str
+    name: str
+    price_monthly: float
+    price_yearly: float
+    features: dict
+    description: str
+    highlight: bool
+
+
+class CreateCheckoutRequest(BaseModel):
+    tier: str
+    billing_cycle: str = "monthly"  # monthly or yearly
+    origin_url: str
+
+
+class SubscriptionResponse(BaseModel):
+    subscription_id: str
+    user_id: str
+    tier: str
+    status: str
+    billing_cycle: str
+    current_period_start: str
+    current_period_end: str
+    stripe_customer_id: Optional[str] = None
+    stripe_subscription_id: Optional[str] = None
+
+
+@app.get("/api/subscriptions/plans")
+async def get_subscription_plans():
+    """Get all available subscription plans"""
+    plans = []
+    for tier_id, tier_data in SUBSCRIPTION_TIERS.items():
+        plans.append({
+            "tier": tier_id,
+            **tier_data
+        })
+    return {"plans": plans}
+
+
+@app.get("/api/subscriptions/current")
+async def get_current_subscription(user: dict = Depends(get_current_user)):
+    """Get user's current subscription"""
+    subscription = await subscriptions_collection.find_one(
+        {"user_id": user["user_id"]},
+        {"_id": 0}
+    )
+    
+    if not subscription:
+        # Return free tier by default
+        now = datetime.now(timezone.utc)
+        return {
+            "subscription_id": None,
+            "user_id": user["user_id"],
+            "tier": "free",
+            "tier_name": "Free",
+            "status": "active",
+            "billing_cycle": None,
+            "features": SUBSCRIPTION_TIERS["free"]["features"],
+            "current_period_start": now.isoformat(),
+            "current_period_end": None,
+            "can_upgrade": True
+        }
+    
+    tier_data = SUBSCRIPTION_TIERS.get(subscription["tier"], SUBSCRIPTION_TIERS["free"])
+    
+    return {
+        **subscription,
+        "tier_name": tier_data["name"],
+        "features": tier_data["features"],
+        "can_upgrade": subscription["tier"] != "enterprise"
+    }
+
+
+@app.post("/api/subscriptions/checkout")
+async def create_checkout_session(
+    request: Request,
+    data: CreateCheckoutRequest,
+    user: dict = Depends(get_current_user)
+):
+    """Create a Stripe checkout session for subscription"""
+    from emergentintegrations.payments.stripe.checkout import (
+        StripeCheckout, CheckoutSessionRequest, CheckoutSessionResponse
+    )
+    
+    tier = data.tier.lower()
+    if tier not in SUBSCRIPTION_TIERS:
+        raise HTTPException(status_code=400, detail="Invalid subscription tier")
+    
+    if tier == "free":
+        raise HTTPException(status_code=400, detail="Free tier doesn't require payment")
+    
+    tier_data = SUBSCRIPTION_TIERS[tier]
+    
+    # Get price based on billing cycle
+    if data.billing_cycle == "yearly":
+        amount = tier_data["price_yearly"]
+    else:
+        amount = tier_data["price_monthly"]
+    
+    # Convert NGN to USD (approximate rate for Stripe - adjust as needed)
+    # Using 1 USD = 1500 NGN for example
+    ngn_to_usd_rate = 1500
+    amount_usd = round(amount / ngn_to_usd_rate, 2)
+    
+    # Ensure minimum amount for Stripe
+    if amount_usd < 0.50:
+        amount_usd = 0.50
+    
+    stripe_api_key = os.environ.get("STRIPE_API_KEY")
+    if not stripe_api_key:
+        raise HTTPException(status_code=500, detail="Payment service not configured")
+    
+    # Setup webhook URL
+    host_url = str(request.base_url).rstrip('/')
+    webhook_url = f"{host_url}/api/webhooks/stripe"
+    
+    stripe_checkout = StripeCheckout(api_key=stripe_api_key, webhook_url=webhook_url)
+    
+    # Create success and cancel URLs
+    success_url = f"{data.origin_url}/subscription?session_id={{CHECKOUT_SESSION_ID}}&status=success"
+    cancel_url = f"{data.origin_url}/subscription?status=cancelled"
+    
+    # Create pending payment transaction
+    payment_id = generate_id("pay")
+    await payment_transactions_collection.insert_one({
+        "payment_id": payment_id,
+        "user_id": user["user_id"],
+        "tier": tier,
+        "billing_cycle": data.billing_cycle,
+        "amount_ngn": amount,
+        "amount_usd": amount_usd,
+        "status": "pending",
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+    
+    # Create checkout session
+    checkout_request = CheckoutSessionRequest(
+        amount=amount_usd,
+        currency="usd",
+        success_url=success_url,
+        cancel_url=cancel_url,
+        metadata={
+            "user_id": user["user_id"],
+            "tier": tier,
+            "billing_cycle": data.billing_cycle,
+            "payment_id": payment_id,
+            "amount_ngn": str(amount)
+        }
+    )
+    
+    try:
+        session: CheckoutSessionResponse = await stripe_checkout.create_checkout_session(checkout_request)
+        
+        # Update payment transaction with session ID
+        await payment_transactions_collection.update_one(
+            {"payment_id": payment_id},
+            {"$set": {"stripe_session_id": session.session_id}}
+        )
+        
+        return {
+            "checkout_url": session.url,
+            "session_id": session.session_id,
+            "payment_id": payment_id
+        }
+    except Exception as e:
+        # Mark payment as failed
+        await payment_transactions_collection.update_one(
+            {"payment_id": payment_id},
+            {"$set": {"status": "failed", "error": str(e)}}
+        )
+        raise HTTPException(status_code=500, detail=f"Failed to create checkout session: {str(e)}")
+
+
+@app.get("/api/subscriptions/checkout/status/{session_id}")
+async def get_checkout_status(session_id: str, user: dict = Depends(get_current_user)):
+    """Check the status of a checkout session and update subscription if paid"""
+    from emergentintegrations.payments.stripe.checkout import StripeCheckout
+    
+    stripe_api_key = os.environ.get("STRIPE_API_KEY")
+    if not stripe_api_key:
+        raise HTTPException(status_code=500, detail="Payment service not configured")
+    
+    stripe_checkout = StripeCheckout(api_key=stripe_api_key)
+    
+    try:
+        status = await stripe_checkout.get_checkout_status(session_id)
+        
+        # Find the payment transaction
+        payment_tx = await payment_transactions_collection.find_one(
+            {"stripe_session_id": session_id, "user_id": user["user_id"]},
+            {"_id": 0}
+        )
+        
+        if not payment_tx:
+            return {"status": status.status, "payment_status": status.payment_status}
+        
+        # If payment is complete and not already processed
+        if status.payment_status == "paid" and payment_tx.get("status") != "completed":
+            tier = status.metadata.get("tier") or payment_tx.get("tier")
+            billing_cycle = status.metadata.get("billing_cycle") or payment_tx.get("billing_cycle", "monthly")
+            
+            # Calculate subscription period
+            now = datetime.now(timezone.utc)
+            if billing_cycle == "yearly":
+                period_end = now + timedelta(days=365)
+            else:
+                period_end = now + timedelta(days=30)
+            
+            subscription_id = generate_id("sub")
+            
+            # Update or create subscription
+            await subscriptions_collection.update_one(
+                {"user_id": user["user_id"]},
+                {"$set": {
+                    "subscription_id": subscription_id,
+                    "user_id": user["user_id"],
+                    "tier": tier,
+                    "status": "active",
+                    "billing_cycle": billing_cycle,
+                    "current_period_start": now.isoformat(),
+                    "current_period_end": period_end.isoformat(),
+                    "stripe_session_id": session_id,
+                    "updated_at": now.isoformat()
+                }},
+                upsert=True
+            )
+            
+            # Update payment transaction
+            await payment_transactions_collection.update_one(
+                {"stripe_session_id": session_id},
+                {"$set": {
+                    "status": "completed",
+                    "completed_at": now.isoformat()
+                }}
+            )
+            
+            tier_data = SUBSCRIPTION_TIERS.get(tier, SUBSCRIPTION_TIERS["free"])
+            
+            return {
+                "status": "complete",
+                "payment_status": "paid",
+                "subscription": {
+                    "subscription_id": subscription_id,
+                    "tier": tier,
+                    "tier_name": tier_data["name"],
+                    "status": "active",
+                    "billing_cycle": billing_cycle,
+                    "features": tier_data["features"],
+                    "current_period_start": now.isoformat(),
+                    "current_period_end": period_end.isoformat()
+                }
+            }
+        
+        return {
+            "status": status.status,
+            "payment_status": status.payment_status,
+            "amount_total": status.amount_total,
+            "currency": status.currency
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to check status: {str(e)}")
+
+
+@app.post("/api/webhooks/stripe")
+async def stripe_webhook(request: Request):
+    """Handle Stripe webhook events"""
+    try:
+        payload = await request.body()
+        # For simplicity, we process without signature verification in test mode
+        # In production, add signature verification
+        
+        import json
+        event = json.loads(payload)
+        
+        event_type = event.get("type")
+        data = event.get("data", {}).get("object", {})
+        
+        if event_type == "checkout.session.completed":
+            session_id = data.get("id")
+            metadata = data.get("metadata", {})
+            
+            user_id = metadata.get("user_id")
+            tier = metadata.get("tier")
+            billing_cycle = metadata.get("billing_cycle", "monthly")
+            payment_id = metadata.get("payment_id")
+            
+            if user_id and tier:
+                now = datetime.now(timezone.utc)
+                if billing_cycle == "yearly":
+                    period_end = now + timedelta(days=365)
+                else:
+                    period_end = now + timedelta(days=30)
+                
+                subscription_id = generate_id("sub")
+                
+                await subscriptions_collection.update_one(
+                    {"user_id": user_id},
+                    {"$set": {
+                        "subscription_id": subscription_id,
+                        "user_id": user_id,
+                        "tier": tier,
+                        "status": "active",
+                        "billing_cycle": billing_cycle,
+                        "current_period_start": now.isoformat(),
+                        "current_period_end": period_end.isoformat(),
+                        "stripe_session_id": session_id,
+                        "updated_at": now.isoformat()
+                    }},
+                    upsert=True
+                )
+                
+                if payment_id:
+                    await payment_transactions_collection.update_one(
+                        {"payment_id": payment_id},
+                        {"$set": {"status": "completed", "completed_at": now.isoformat()}}
+                    )
+        
+        return {"received": True}
+    except Exception as e:
+        return {"received": True, "error": str(e)}
+
+
+@app.post("/api/subscriptions/cancel")
+async def cancel_subscription(user: dict = Depends(get_current_user)):
+    """Cancel user's subscription (downgrades to free at period end)"""
+    subscription = await subscriptions_collection.find_one(
+        {"user_id": user["user_id"]},
+        {"_id": 0}
+    )
+    
+    if not subscription:
+        raise HTTPException(status_code=404, detail="No active subscription found")
+    
+    if subscription.get("tier") == "free":
+        raise HTTPException(status_code=400, detail="You are already on the free tier")
+    
+    await subscriptions_collection.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {
+            "status": "cancelling",
+            "cancel_at_period_end": True,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    return {
+        "message": "Subscription will be cancelled at the end of the current billing period",
+        "current_period_end": subscription.get("current_period_end")
+    }
+
+
+# Feature access helper
+async def check_feature_access(user_id: str, feature: str) -> bool:
+    """Check if user has access to a specific feature based on their subscription"""
+    subscription = await subscriptions_collection.find_one(
+        {"user_id": user_id},
+        {"_id": 0}
+    )
+    
+    tier = subscription.get("tier", "free") if subscription else "free"
+    tier_data = SUBSCRIPTION_TIERS.get(tier, SUBSCRIPTION_TIERS["free"])
+    
+    return tier_data["features"].get(feature, False)
+
+
+async def get_user_tier(user_id: str) -> str:
+    """Get user's subscription tier"""
+    subscription = await subscriptions_collection.find_one(
+        {"user_id": user_id},
+        {"_id": 0}
+    )
+    return subscription.get("tier", "free") if subscription else "free"
+
+
+# Update existing endpoints to check feature access
+
+@app.get("/api/subscriptions/feature-check/{feature}")
+async def check_feature(feature: str, user: dict = Depends(get_current_user)):
+    """Check if user has access to a specific feature"""
+    has_access = await check_feature_access(user["user_id"], feature)
+    tier = await get_user_tier(user["user_id"])
+    
+    return {
+        "feature": feature,
+        "has_access": has_access,
+        "current_tier": tier,
+        "upgrade_required": not has_access and feature in SUBSCRIPTION_TIERS["starter"]["features"]
+    }
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8001)
