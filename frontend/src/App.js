@@ -1020,6 +1020,7 @@ function BusinessSetupModal({ onClose }) {
 
 // ============== TRANSACTIONS PAGE ==============
 function TransactionsPage() {
+  const { usage, checkFeatureAccess, promptUpgrade, refreshSubscription, tier, tierName } = useSubscription();
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -1063,17 +1064,75 @@ function TransactionsPage() {
     }
   };
 
+  const handleScanReceipt = () => {
+    if (!checkFeatureAccess('receipt_ocr')) {
+      promptUpgrade('receipt_ocr');
+      return;
+    }
+    setShowScanModal(true);
+  };
+
+  const handleAddTransaction = () => {
+    // Check if limit reached before showing modal
+    if (usage?.transactions?.limit_exceeded) {
+      promptUpgrade('transaction_limit');
+      return;
+    }
+    setShowAddModal(true);
+  };
+
+  // Calculate usage percentage for progress bar
+  const usagePercentage = usage?.transactions?.usage_percentage || 0;
+  const isNearLimit = usagePercentage >= 80;
+  const isAtLimit = usage?.transactions?.limit_exceeded;
+
   return (
     <div className="p-4 lg:p-8 space-y-6" data-testid="transactions-page">
+      {/* Usage Banner */}
+      {tier === 'free' && usage && (
+        <div className={`glass rounded-xl p-4 ${isAtLimit ? 'border border-red-500/50 bg-red-500/5' : isNearLimit ? 'border border-yellow-500/50 bg-yellow-500/5' : ''}`} data-testid="usage-banner">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <Receipt className={`w-4 h-4 ${isAtLimit ? 'text-red-500' : isNearLimit ? 'text-yellow-500' : 'text-muted-foreground'}`} />
+              <span className="text-sm font-medium">
+                {usage.transactions.used} / {usage.transactions.limit} transactions this month
+              </span>
+            </div>
+            {(isNearLimit || isAtLimit) && (
+              <Link to="/subscription" className="text-xs text-emerald-500 hover:underline flex items-center gap-1">
+                <Crown className="w-3 h-3" />
+                Upgrade
+              </Link>
+            )}
+          </div>
+          <div className="h-2 bg-secondary rounded-full overflow-hidden">
+            <div 
+              className={`h-full transition-all ${isAtLimit ? 'bg-red-500' : isNearLimit ? 'bg-yellow-500' : 'bg-emerald-500'}`}
+              style={{ width: `${Math.min(100, usagePercentage)}%` }}
+            />
+          </div>
+          {isAtLimit && (
+            <p className="text-xs text-red-500 mt-2">
+              You have reached your monthly limit. Upgrade to add more transactions.
+            </p>
+          )}
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Transactions</h1>
           <p className="text-muted-foreground">Manage your income and expenses</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button onClick={() => setShowScanModal(true)} className="bg-secondary hover:bg-secondary/80 px-4 py-2 rounded-lg inline-flex items-center gap-2 text-sm" data-testid="scan-receipt-btn">
+          <button 
+            onClick={handleScanReceipt} 
+            className={`bg-secondary hover:bg-secondary/80 px-4 py-2 rounded-lg inline-flex items-center gap-2 text-sm ${!checkFeatureAccess('receipt_ocr') ? 'opacity-70' : ''}`} 
+            data-testid="scan-receipt-btn"
+          >
             <Camera className="w-4 h-4" />
             Scan Receipt
+            {!checkFeatureAccess('receipt_ocr') && <Crown className="w-3 h-3 text-yellow-500" />}
           </button>
           <button onClick={() => setShowImportModal(true)} className="bg-secondary hover:bg-secondary/80 px-4 py-2 rounded-lg inline-flex items-center gap-2 text-sm" data-testid="import-csv-btn">
             <Upload className="w-4 h-4" />
