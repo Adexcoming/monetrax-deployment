@@ -1,7 +1,7 @@
 # Monetrax - Financial OS for Nigerian MSMEs
 
 ## Original Problem Statement
-Build Monetrax (formerly Naira Ledger) - a comprehensive financial operating system for Nigerian MSMEs with:
+Build Monetrax - a comprehensive financial operating system for Nigerian MSMEs with:
 - Tax compliance (VAT 7.5%, Income Tax)
 - Transaction tracking & bookkeeping
 - NRS (Nigeria Revenue Service) readiness
@@ -9,16 +9,20 @@ Build Monetrax (formerly Naira Ledger) - a comprehensive financial operating sys
 - Secure authentication (Google OAuth + MFA)
 - Subscription-based pricing with Stripe integration
 
-## User Choices
-1. Authentication: Both Google OAuth + TOTP MFA
-2. AI Features: OpenAI GPT for transaction categorization & insights
-3. Receipt OCR: Google Vision API integration ✅
-4. PDF Export: Implemented ✅
-5. CSV Import/Export: Implemented ✅
-6. Charts & Graphs: Implemented with Recharts ✅
-7. AI Insight Levels: Basic/Standard/Premium ✅
-8. Subscription Tiers: Free, Starter, Business, Enterprise ✅
-9. Payment Processing: Stripe Integration ✅
+## Subscription Tiers (Updated Jan 20, 2026)
+| Tier | Monthly | Yearly | Transactions | AI Insights | Receipt OCR | PDF Reports |
+|------|---------|--------|--------------|-------------|-------------|-------------|
+| Free | ₦0 | ₦0 | 50/month | ❌ | ❌ | ❌ |
+| Starter | ₦5,000 | ₦50,000 | 200/month | ✅ | ✅ | ✅ |
+| Business | ₦10,000 | ₦100,000 | 1,000/month | ✅ | ✅ | ✅ |
+| Enterprise | ₦20,000 | ₦200,000 | Unlimited | ✅ | ✅ | ✅ |
+
+## Tier Enforcement Features
+- **Transaction Limits**: Backend enforces monthly limits, returns 403 when exceeded
+- **Feature Gating**: Premium features (AI, OCR, PDF) locked for free tier
+- **Usage Tracking**: Real-time usage stats with progress bars
+- **Upgrade Prompts**: Modal appears when accessing premium features on free tier
+- **Free Trial Prevention**: `had_paid_subscription` flag prevents free tier abuse
 
 ## Architecture
 
@@ -39,10 +43,10 @@ Build Monetrax (formerly Naira Ledger) - a comprehensive financial operating sys
 - `businesses` - Business profiles
 - `transactions` - Income/expense transactions
 - `tax_records` - Tax filing history
-- `subscriptions` - User subscription data ✅ NEW
-- `payment_transactions` - Payment history ✅ NEW
+- `subscriptions` - User subscription data
+- `payment_transactions` - Payment history
 
-## What's Been Implemented (Jan 20, 2026)
+## What's Been Implemented
 
 ### Core Features
 - ✅ Google OAuth + TOTP MFA authentication
@@ -53,95 +57,49 @@ Build Monetrax (formerly Naira Ledger) - a comprehensive financial operating sys
 - ✅ Dark/Light theme toggle
 
 ### Enhanced Features
-- ✅ **Receipt OCR Scanning** - Upload receipt images, AI parses merchant/amount/date
-- ✅ **PDF Tax Report Export** - Professional PDF with income statement, tax breakdown
-- ✅ **CSV Import** - Bulk import transactions from CSV
-- ✅ **CSV Export** - Export transactions to CSV
-- ✅ **Interactive Charts**:
-  - Line Chart: Revenue vs Expenses trend
-  - Bar Chart: Monthly profit
-  - Pie Charts: Revenue/Expense by category
-- ✅ **AI Insights with Levels**:
-  - Basic: Quick 2-3 sentence summary
-  - Standard: Detailed analysis with recommendations
-  - Premium: Full report with tax optimization, cash flow, growth opportunities
+- ✅ **Receipt OCR Scanning** - Upload receipt images, AI parses data (Gated)
+- ✅ **PDF Tax Report Export** - Professional PDF reports (Gated)
+- ✅ **CSV Import/Export** - Bulk transaction management
+- ✅ **Interactive Charts** - Line, Bar, Pie charts
+- ✅ **AI Insights** - Basic/Standard/Premium levels (Gated)
 
-### Subscription System (NEW - Jan 20, 2026)
-- ✅ **4-Tier Subscription Model**:
-  - **Free**: ₦0/month - 50 transactions, CSV export only
-  - **Starter**: ₦2,500/month - 200 transactions, AI insights, Receipt OCR, PDF reports
-  - **Business**: ₦7,500/month - 1000 transactions, Priority support (Most Popular)
-  - **Enterprise**: ₦25,000/month - Unlimited transactions, Multi-user access
-- ✅ **Stripe Payment Integration** - Secure checkout sessions via emergentintegrations
-- ✅ **Billing Cycle Toggle** - Monthly/Yearly with 17% yearly discount
-- ✅ **Subscription Management**:
-  - View current subscription status
-  - Upgrade to higher tiers
-  - Cancel subscription (reverts to free at period end)
-- ✅ **Feature Gating** - API to check feature access based on tier
-- ✅ **Payment Status Polling** - Frontend polls for payment completion
-- ✅ **Webhook Support** - Handle Stripe events for subscription updates
+### Subscription System
+- ✅ **4-Tier Model**: Free, Starter, Business, Enterprise
+- ✅ **Stripe Integration**: Secure checkout sessions
+- ✅ **Transaction Limits**: 50/200/1000/Unlimited per month
+- ✅ **Feature Gating**: AI, OCR, PDF locked for free tier
+- ✅ **Usage Banner**: Progress bar showing transactions used
+- ✅ **Upgrade Modal**: Prompts when accessing premium features
+- ✅ **Crown Icons**: Visual indicators on premium features
+- ✅ **Free Trial Prevention**: Tracks paid subscription history
 
 ## API Endpoints
 
-### Authentication
+### Subscriptions
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | /api/auth/session | Create session from OAuth |
-| GET | /api/auth/me | Get current user |
-| POST | /api/auth/logout | Logout |
-
-### MFA
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | /api/mfa/totp/setup | Initialize TOTP |
-| POST | /api/mfa/totp/verify | Verify & enable TOTP |
-| POST | /api/mfa/totp/authenticate | Verify TOTP during login |
-| GET | /api/mfa/status | Get MFA status |
-
-### Business & Transactions
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | /api/business | Create business |
-| GET | /api/business | Get business |
-| POST | /api/transactions | Create transaction |
-| GET | /api/transactions | List transactions |
-| DELETE | /api/transactions/{id} | Delete transaction |
-
-### Tax & Reports
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | /api/summary | Financial summary |
-| GET | /api/tax/summary | Tax summary |
-| GET | /api/tax/calendar | Tax deadlines |
-| GET | /api/reports/income-statement | Income statement |
-| GET | /api/reports/export/pdf | Export PDF report |
-
-### Enhanced Features
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | /api/receipts/scan | OCR receipt scanning |
-| POST | /api/transactions/import/csv | Bulk CSV import |
-| GET | /api/transactions/export/csv | Export to CSV |
-| GET | /api/analytics/charts | Charts data |
-| POST | /api/ai/insights/v2 | AI insights with levels |
-| GET | /api/categories | Transaction categories |
-
-### Subscriptions (NEW)
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | /api/subscriptions/plans | Get all subscription tiers |
-| GET | /api/subscriptions/current | Get user's current subscription |
+| GET | /api/subscriptions/plans | Get all tiers with pricing |
+| GET | /api/subscriptions/current | Get subscription with usage stats |
+| GET | /api/subscriptions/usage | Detailed usage (limit_exceeded flag) |
 | POST | /api/subscriptions/checkout | Create Stripe checkout session |
-| GET | /api/subscriptions/checkout/status/{session_id} | Check payment status |
+| GET | /api/subscriptions/checkout/status/{id} | Check payment status |
 | GET | /api/subscriptions/feature-check/{feature} | Check feature access |
 | POST | /api/subscriptions/cancel | Cancel subscription |
 | POST | /api/webhooks/stripe | Stripe webhook handler |
 
-## Testing Results
-- Backend Subscription Tests: 100% (28/28 tests passed)
-- Frontend UI Tests: 100% (11/11 tests passed)
-- Overall: 100% success rate
+### Other Endpoints
+- Authentication: /api/auth/session, /api/auth/me, /api/auth/logout
+- MFA: /api/mfa/totp/setup, /api/mfa/totp/verify, /api/mfa/status
+- Business: /api/business (POST/GET/PATCH)
+- Transactions: /api/transactions (POST/GET/DELETE)
+- Tax: /api/summary, /api/tax/summary, /api/tax/calendar
+- Reports: /api/reports/income-statement, /api/reports/export/pdf
+- AI: /api/ai/insights/v2, /api/ai/categorize
+- OCR: /api/receipts/scan
+
+## Testing Results (Jan 20, 2026)
+- Backend: 100% (44 tests passed)
+- Frontend: 100% (25 UI tests passed)
 
 ## Prioritized Backlog
 
@@ -153,14 +111,15 @@ Build Monetrax (formerly Naira Ledger) - a comprehensive financial operating sys
 - ✅ PDF Export
 - ✅ CSV Import/Export
 - ✅ Charts & Analytics
-- ✅ AI Insights with levels
+- ✅ AI Insights
 - ✅ Subscription System with Stripe
+- ✅ Tier Enforcement
 
 ### P1 - High Priority (Next)
+- Frontend refactoring (break down App.js)
 - WhatsApp integration for transaction recording
 - Email notifications for tax deadlines
 - Invoice generation
-- Frontend component refactoring (break down App.js)
 
 ### P2 - Medium Priority
 - Multi-currency support
@@ -172,32 +131,3 @@ Build Monetrax (formerly Naira Ledger) - a comprehensive financial operating sys
 - Pidgin language support
 - Mobile app (React Native)
 - Multi-user business accounts (Enterprise tier)
-
-## Deployment Notes
-- GCP-ready architecture
-- All endpoints properly secured
-- Environment variables for configuration
-- Receipt OCR requires GOOGLE_VISION_API_KEY (optional)
-- Stripe uses test key sk_test_emergent
-
-## File Structure
-```
-/app/
-├── backend/
-│   ├── server.py         # FastAPI backend (including subscription system)
-│   └── .env              # Backend environment variables
-│   └── requirements.txt  # Python dependencies
-├── frontend/
-│   ├── src/
-│   │   ├── App.js        # Main React component (includes SubscriptionPage)
-│   │   └── index.css     # Global and TailwindCSS styles
-│   ├── public/
-│   │   ├── logo.svg      # Main brand logo
-│   │   └── logo-icon.svg # Icon version of the logo
-│   ├── package.json      # Frontend dependencies
-│   └── .env              # Frontend environment variables
-├── tests/
-│   └── test_subscription_system.py  # Subscription API tests
-└── memory/
-    └── PRD.md            # Product Requirements Document
-```
