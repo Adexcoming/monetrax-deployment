@@ -1815,6 +1815,7 @@ function TaxPage() {
 
 // ============== REPORTS PAGE ==============
 function ReportsPage() {
+  const { checkFeatureAccess, promptUpgrade, tier } = useSubscription();
   const [report, setReport] = useState(null);
   const [chartsData, setChartsData] = useState(null);
   const [aiInsights, setAiInsights] = useState(null);
@@ -1845,6 +1846,11 @@ function ReportsPage() {
   };
 
   const handleExportPDF = async () => {
+    if (!checkFeatureAccess('pdf_reports')) {
+      promptUpgrade('pdf_reports');
+      return;
+    }
+    
     try {
       const response = await fetch(`${API_URL}/api/reports/export/pdf?report_type=income-statement`, {
         credentials: 'include'
@@ -1864,6 +1870,11 @@ function ReportsPage() {
   };
 
   const handleGetInsights = async () => {
+    if (!checkFeatureAccess('ai_insights')) {
+      promptUpgrade('ai_insights');
+      return;
+    }
+    
     if (!insightQuery.trim()) {
       toast.error('Please enter a question');
       return;
