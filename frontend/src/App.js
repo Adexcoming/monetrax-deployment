@@ -2756,13 +2756,15 @@ function App() {
     <BrowserRouter>
       <ThemeProvider>
         <AuthProvider>
-          <Toaster 
-            position="top-center" 
-            toastOptions={{
-              style: { background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', color: 'hsl(var(--foreground))' },
-            }}
-          />
-          <AppRouter />
+          <SubscriptionProvider>
+            <Toaster 
+              position="top-center" 
+              toastOptions={{
+                style: { background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', color: 'hsl(var(--foreground))' },
+              }}
+            />
+            <AppRouter />
+          </SubscriptionProvider>
         </AuthProvider>
       </ThemeProvider>
     </BrowserRouter>
