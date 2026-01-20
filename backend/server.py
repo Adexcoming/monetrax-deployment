@@ -1859,15 +1859,37 @@ async def get_subscription_plans():
 
 @app.get("/api/subscriptions/current")
 async def get_current_subscription(user: dict = Depends(get_current_user)):
-    """Get user's current subscription"""
+    """Get user's current subscription with usage stats"""
     subscription = await subscriptions_collection.find_one(
         {"user_id": user["user_id"]},
         {"_id": 0}
     )
     
-    if not subscription:
-        # Return free tier by default
+    # Get business for usage calculation
+    business = await get_user_business(user["user_id"])
+    
+    # Calculate monthly usage
+    usage = {"transactions_this_month": 0, "transactions_limit": 50}
+    if business:
         now = datetime.now(timezone.utc)
+        month_start = now.replace(day=1).strftime("%Y-%m-%d")
+        monthly_tx_count = await transactions_collection.count_documents({
+            "business_id": business["business_id"],
+            "date": {"$gte": month_start}
+        })
+        usage["transactions_this_month"] = monthly_tx_count
+    
+    if not subscription:
+        # Check if user ever had a paid subscription (prevent free tier re-trial)
+        had_paid_subscription = await payment_transactions_collection.find_one(
+            {"user_id": user["user_id"], "status": "completed"},
+            {"_id": 0}
+        )
+        
+        now = datetime.now(timezone.utc)
+        tier_data = SUBSCRIPTION_TIERS["free"]
+        usage["transactions_limit"] = tier_data["features"]["transactions_per_month"]
+        
         return {
             "subscription_id": None,
             "user_id": user["user_id"],
@@ -1875,19 +1897,24 @@ async def get_current_subscription(user: dict = Depends(get_current_user)):
             "tier_name": "Free",
             "status": "active",
             "billing_cycle": None,
-            "features": SUBSCRIPTION_TIERS["free"]["features"],
+            "features": tier_data["features"],
             "current_period_start": now.isoformat(),
             "current_period_end": None,
-            "can_upgrade": True
+            "can_upgrade": True,
+            "had_paid_subscription": bool(had_paid_subscription),
+            "usage": usage
         }
     
     tier_data = SUBSCRIPTION_TIERS.get(subscription["tier"], SUBSCRIPTION_TIERS["free"])
+    usage["transactions_limit"] = tier_data["features"]["transactions_per_month"]
     
     return {
         **subscription,
         "tier_name": tier_data["name"],
         "features": tier_data["features"],
-        "can_upgrade": subscription["tier"] != "enterprise"
+        "can_upgrade": subscription["tier"] != "enterprise",
+        "had_paid_subscription": True,
+        "usage": usage
     }
 
 
