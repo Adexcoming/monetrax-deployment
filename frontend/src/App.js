@@ -1531,21 +1531,70 @@ function TaxPage() {
 // ============== REPORTS PAGE ==============
 function ReportsPage() {
   const [report, setReport] = useState(null);
+  const [chartsData, setChartsData] = useState(null);
+  const [aiInsights, setAiInsights] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [insightLevel, setInsightLevel] = useState('standard');
+  const [insightQuery, setInsightQuery] = useState('');
+  const [loadingInsight, setLoadingInsight] = useState(false);
+  const { theme } = useTheme();
 
   useEffect(() => {
-    fetchReport();
+    fetchData();
   }, []);
 
-  const fetchReport = async () => {
+  const fetchData = async () => {
     setLoading(true);
     try {
-      const data = await api('/api/reports/income-statement');
-      setReport(data);
+      const [reportData, chartData] = await Promise.all([
+        api('/api/reports/income-statement'),
+        api('/api/analytics/charts?period=6months')
+      ]);
+      setReport(reportData);
+      setChartsData(chartData);
     } catch (error) {
-      console.error('Failed to fetch report:', error);
+      console.error('Failed to fetch data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleExportPDF = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/reports/export/pdf?report_type=income-statement`, {
+        credentials: 'include'
+      });
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `monetrax_tax_report_${new Date().getFullYear()}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      toast.success('PDF exported!');
+    } catch (error) {
+      toast.error('Export failed');
+    }
+  };
+
+  const handleGetInsights = async () => {
+    if (!insightQuery.trim()) {
+      toast.error('Please enter a question');
+      return;
+    }
+    
+    setLoadingInsight(true);
+    try {
+      const data = await api('/api/ai/insights/v2', {
+        method: 'POST',
+        body: JSON.stringify({ query: insightQuery, level: insightLevel, include_charts: true })
+      });
+      setAiInsights(data);
+    } catch (error) {
+      toast.error('Failed to get insights');
+    } finally {
+      setLoadingInsight(false);
     }
   };
 
@@ -1557,17 +1606,244 @@ function ReportsPage() {
     );
   }
 
+  // Prepare chart data
+  const incomeChartData = Object.entries(report?.income?.categories || {}).map(([name, value]) => ({ name, value }));
+  const expenseChartData = Object.entries(report?.expenses?.categories || {}).map(([name, value]) => ({ name, value }));
+  const monthlyData = chartsData?.monthly_data || [];
+
   return (
     <div className="p-4 lg:p-8 space-y-6" data-testid="reports-page">
-      <div>
-        <h1 className="text-2xl font-bold">Reports</h1>
-        <p className="text-muted-foreground">Financial statements and analysis</p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">Reports & Analytics</h1>
+          <p className="text-muted-foreground">Financial statements, charts, and AI insights</p>
+        </div>
+        <button onClick={handleExportPDF} className="btn-primary px-4 py-2 rounded-lg inline-flex items-center gap-2" data-testid="export-pdf-btn">
+          <Download className="w-4 h-4" />
+          Export PDF Report
+        </button>
+      </div>
+
+      {/* Charts Section */}
+      {monthlyData.length > 0 && (
+        <div className="grid lg:grid-cols-2 gap-6">
+          {/* Revenue vs Expenses Line Chart */}
+          <div className="glass rounded-2xl p-6">
+            <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
+              <TrendingUp className="w-5 h-5 text-emerald-500" />
+              Revenue vs Expenses Trend
+            </h3>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={monthlyData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? '#374151' : '#e5e7eb'} />
+                  <XAxis dataKey="month" tick={{ fill: theme === 'dark' ? '#9ca3af' : '#6b7280', fontSize: 12 }} />
+                  <YAxis tick={{ fill: theme === 'dark' ? '#9ca3af' : '#6b7280', fontSize: 12 }} tickFormatter={(v) => `₦${(v/1000).toFixed(0)}k`} />
+                  <Tooltip 
+                    contentStyle={{ background: theme === 'dark' ? '#1f2937' : '#fff', border: '1px solid #374151', borderRadius: '8px' }}
+                    formatter={(value) => [`₦${value.toLocaleString()}`, '']}
+                  />
+                  <Legend />
+                  <Line type="monotone" dataKey="income" stroke="#10b981" strokeWidth={2} dot={{ fill: '#10b981' }} name="Revenue" />
+                  <Line type="monotone" dataKey="expense" stroke="#ef4444" strokeWidth={2} dot={{ fill: '#ef4444' }} name="Expenses" />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Profit Trend Bar Chart */}
+          <div className="glass rounded-2xl p-6">
+            <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
+              <BarChart3 className="w-5 h-5 text-emerald-500" />
+              Monthly Profit
+            </h3>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={monthlyData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? '#374151' : '#e5e7eb'} />
+                  <XAxis dataKey="month" tick={{ fill: theme === 'dark' ? '#9ca3af' : '#6b7280', fontSize: 12 }} />
+                  <YAxis tick={{ fill: theme === 'dark' ? '#9ca3af' : '#6b7280', fontSize: 12 }} tickFormatter={(v) => `₦${(v/1000).toFixed(0)}k`} />
+                  <Tooltip 
+                    contentStyle={{ background: theme === 'dark' ? '#1f2937' : '#fff', border: '1px solid #374151', borderRadius: '8px' }}
+                    formatter={(value) => [`₦${value.toLocaleString()}`, 'Profit']}
+                  />
+                  <Bar dataKey="profit" fill="#10b981" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Category Pie Charts */}
+      {(incomeChartData.length > 0 || expenseChartData.length > 0) && (
+        <div className="grid lg:grid-cols-2 gap-6">
+          {/* Income by Category */}
+          {incomeChartData.length > 0 && (
+            <div className="glass rounded-2xl p-6">
+              <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
+                <PieChart className="w-5 h-5 text-blue-500" />
+                Revenue by Category
+              </h3>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <RechartsPie>
+                    <Pie
+                      data={incomeChartData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={80}
+                      paddingAngle={5}
+                      dataKey="value"
+                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    >
+                      {incomeChartData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(value) => `₦${value.toLocaleString()}`} />
+                  </RechartsPie>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+
+          {/* Expenses by Category */}
+          {expenseChartData.length > 0 && (
+            <div className="glass rounded-2xl p-6">
+              <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
+                <PieChart className="w-5 h-5 text-red-500" />
+                Expenses by Category
+              </h3>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <RechartsPie>
+                    <Pie
+                      data={expenseChartData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={80}
+                      paddingAngle={5}
+                      dataKey="value"
+                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    >
+                      {expenseChartData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={CHART_COLORS[(index + 4) % CHART_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(value) => `₦${value.toLocaleString()}`} />
+                  </RechartsPie>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* AI Insights Section */}
+      <div className="glass rounded-2xl p-6">
+        <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
+          <Sparkles className="w-5 h-5 text-purple-500" />
+          AI-Powered Insights
+        </h3>
+        
+        {/* Level Selector */}
+        <div className="flex flex-wrap gap-2 mb-4">
+          {[
+            { value: 'basic', label: 'Basic', desc: 'Quick summary' },
+            { value: 'standard', label: 'Standard', desc: 'Detailed analysis' },
+            { value: 'premium', label: 'Premium', desc: 'Full report' }
+          ].map((level) => (
+            <button
+              key={level.value}
+              onClick={() => setInsightLevel(level.value)}
+              className={`px-4 py-2 rounded-lg text-sm transition-all ${
+                insightLevel === level.value 
+                  ? 'bg-purple-500 text-white' 
+                  : 'bg-secondary/50 text-muted-foreground hover:bg-secondary'
+              }`}
+            >
+              {level.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Query Input */}
+        <div className="flex gap-3 mb-6">
+          <input
+            type="text"
+            value={insightQuery}
+            onChange={(e) => setInsightQuery(e.target.value)}
+            placeholder="Ask about your finances... e.g., 'How can I reduce expenses?' or 'What's my tax situation?'"
+            className="flex-1 bg-secondary/50 border border-border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-purple-500"
+            onKeyPress={(e) => e.key === 'Enter' && handleGetInsights()}
+          />
+          <button 
+            onClick={handleGetInsights}
+            disabled={loadingInsight}
+            className="bg-purple-500 hover:bg-purple-600 text-white px-6 py-3 rounded-xl font-medium flex items-center gap-2 disabled:opacity-50"
+          >
+            {loadingInsight ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+            {loadingInsight ? 'Analyzing...' : 'Get Insights'}
+          </button>
+        </div>
+
+        {/* AI Response */}
+        {aiInsights && (
+          <div className="space-y-4 animate-fade-in">
+            {/* Metrics */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="p-4 bg-emerald-500/10 rounded-xl">
+                <p className="text-xs text-muted-foreground">Revenue</p>
+                <p className="text-lg font-bold text-emerald-500">{formatCurrency(aiInsights.metrics?.income || 0)}</p>
+              </div>
+              <div className="p-4 bg-red-500/10 rounded-xl">
+                <p className="text-xs text-muted-foreground">Expenses</p>
+                <p className="text-lg font-bold text-red-500">{formatCurrency(aiInsights.metrics?.expenses || 0)}</p>
+              </div>
+              <div className="p-4 bg-blue-500/10 rounded-xl">
+                <p className="text-xs text-muted-foreground">Profit</p>
+                <p className="text-lg font-bold text-blue-500">{formatCurrency(aiInsights.metrics?.profit || 0)}</p>
+              </div>
+              <div className="p-4 bg-purple-500/10 rounded-xl">
+                <p className="text-xs text-muted-foreground">Profit Margin</p>
+                <p className="text-lg font-bold text-purple-500">{aiInsights.metrics?.profit_margin || 0}%</p>
+              </div>
+            </div>
+
+            {/* AI Analysis */}
+            <div className="p-4 bg-purple-500/10 border border-purple-500/20 rounded-xl">
+              <div className="flex items-start gap-3">
+                <Sparkles className="w-5 h-5 text-purple-500 flex-shrink-0 mt-0.5" />
+                <div className="prose prose-sm max-w-none">
+                  <p className="text-foreground whitespace-pre-wrap">{aiInsights.insight}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Chart Recommendations */}
+            {aiInsights.chart_recommendations?.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {aiInsights.chart_recommendations.map((rec, i) => (
+                  <div key={i} className="px-3 py-2 bg-secondary/50 rounded-lg text-sm flex items-center gap-2">
+                    {rec.type === 'line' && <TrendingUp className="w-4 h-4 text-emerald-500" />}
+                    {rec.type === 'bar' && <BarChart3 className="w-4 h-4 text-blue-500" />}
+                    {rec.type === 'pie' && <PieChart className="w-4 h-4 text-purple-500" />}
+                    <span>{rec.title}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Income Statement */}
       <div className="glass rounded-2xl p-6">
         <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
-          <BarChart3 className="w-5 h-5 text-emerald-500" />
+          <FileText className="w-5 h-5 text-emerald-500" />
           Income Statement - {report?.business_name}
         </h3>
 
