@@ -818,6 +818,8 @@ function TransactionsPage() {
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showScanModal, setShowScanModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [filter, setFilter] = useState('all');
 
   useEffect(() => {
@@ -837,6 +839,25 @@ function TransactionsPage() {
     }
   };
 
+  const handleExportCSV = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/transactions/export/csv`, {
+        credentials: 'include'
+      });
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `monetrax_transactions_${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      toast.success('Transactions exported!');
+    } catch (error) {
+      toast.error('Export failed');
+    }
+  };
+
   return (
     <div className="p-4 lg:p-8 space-y-6" data-testid="transactions-page">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -844,10 +865,24 @@ function TransactionsPage() {
           <h1 className="text-2xl font-bold">Transactions</h1>
           <p className="text-muted-foreground">Manage your income and expenses</p>
         </div>
-        <button onClick={() => setShowAddModal(true)} className="btn-primary px-4 py-2 rounded-lg inline-flex items-center gap-2" data-testid="add-transaction-btn">
-          <Plus className="w-4 h-4" />
-          Add Transaction
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button onClick={() => setShowScanModal(true)} className="bg-secondary hover:bg-secondary/80 px-4 py-2 rounded-lg inline-flex items-center gap-2 text-sm" data-testid="scan-receipt-btn">
+            <Camera className="w-4 h-4" />
+            Scan Receipt
+          </button>
+          <button onClick={() => setShowImportModal(true)} className="bg-secondary hover:bg-secondary/80 px-4 py-2 rounded-lg inline-flex items-center gap-2 text-sm" data-testid="import-csv-btn">
+            <Upload className="w-4 h-4" />
+            Import CSV
+          </button>
+          <button onClick={handleExportCSV} className="bg-secondary hover:bg-secondary/80 px-4 py-2 rounded-lg inline-flex items-center gap-2 text-sm" data-testid="export-csv-btn">
+            <Download className="w-4 h-4" />
+            Export
+          </button>
+          <button onClick={() => setShowAddModal(true)} className="btn-primary px-4 py-2 rounded-lg inline-flex items-center gap-2 text-sm" data-testid="add-transaction-btn">
+            <Plus className="w-4 h-4" />
+            Add Transaction
+          </button>
+        </div>
       </div>
 
       {/* Filter Tabs */}
