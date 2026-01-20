@@ -289,6 +289,156 @@ class MonettraxAPITester:
                 return False
         return success
 
+    def test_analytics_charts_endpoint(self):
+        """Test analytics charts endpoint - requires auth"""
+        success, response = self.run_test(
+            "Analytics Charts API (GET /api/analytics/charts)",
+            "GET",
+            "/api/analytics/charts?period=6months",
+            200
+        )
+        
+        if success:
+            # Check for chart data structure
+            required_fields = ["monthly_data", "category_breakdown", "totals"]
+            missing_fields = [field for field in required_fields if field not in response]
+            
+            if not missing_fields:
+                print(f"   ✅ Analytics charts data structure complete")
+                return True
+            else:
+                print(f"   ⚠️  Missing chart data fields: {missing_fields}")
+                return False
+        return success
+
+    def test_pdf_export_endpoint(self):
+        """Test PDF export endpoint"""
+        success, response = self.run_test(
+            "PDF Export Endpoint (GET /api/reports/export/pdf)",
+            "GET",
+            "/api/reports/export/pdf?report_type=income-statement&year=2026",
+            200
+        )
+        
+        if success:
+            print(f"   ✅ PDF export endpoint accessible")
+            return True
+        return success
+
+    def test_csv_export_endpoint(self):
+        """Test CSV export endpoint"""
+        success, response = self.run_test(
+            "CSV Export Endpoint (GET /api/transactions/export/csv)",
+            "GET",
+            "/api/transactions/export/csv",
+            200
+        )
+        
+        if success:
+            print(f"   ✅ CSV export endpoint accessible")
+            return True
+        return success
+
+    def test_csv_import_endpoint(self):
+        """Test CSV import endpoint - POST with file"""
+        # Create a simple CSV content for testing
+        csv_content = "date,type,category,amount,description,is_taxable\n2026-01-20,income,Sales,5000,Test sale,true\n"
+        
+        # For this test, we'll just check if the endpoint exists and handles requests
+        # We can't easily test file upload without proper multipart handling
+        print(f"\n🔍 Testing CSV Import Endpoint (POST /api/transactions/import/csv)...")
+        print(f"   URL: {self.base_url}/api/transactions/import/csv")
+        print(f"   Note: Testing endpoint existence - file upload requires multipart form data")
+        
+        # Test with empty request to see if endpoint exists
+        try:
+            headers = {'Content-Type': 'application/json'}
+            if self.session_token:
+                headers['Authorization'] = f'Bearer {self.session_token}'
+                
+            response = requests.post(
+                f"{self.base_url}/api/transactions/import/csv",
+                headers=headers,
+                timeout=10
+            )
+            
+            # Endpoint should exist but return 400 for missing file
+            if response.status_code in [400, 422]:
+                print(f"✅ PASSED - CSV Import endpoint exists (status: {response.status_code})")
+                self.tests_passed += 1
+                return True
+            else:
+                print(f"❌ FAILED - Unexpected status: {response.status_code}")
+                return False
+                
+        except requests.exceptions.RequestException as e:
+            print(f"❌ FAILED - Network Error: {str(e)}")
+            return False
+        finally:
+            self.tests_run += 1
+
+    def test_receipt_scan_endpoint(self):
+        """Test receipt scan endpoint - POST with file"""
+        print(f"\n🔍 Testing Receipt Scan Endpoint (POST /api/receipts/scan)...")
+        print(f"   URL: {self.base_url}/api/receipts/scan")
+        print(f"   Note: Testing endpoint existence - file upload requires multipart form data")
+        
+        # Test with empty request to see if endpoint exists
+        try:
+            headers = {'Content-Type': 'application/json'}
+            if self.session_token:
+                headers['Authorization'] = f'Bearer {self.session_token}'
+                
+            response = requests.post(
+                f"{self.base_url}/api/receipts/scan",
+                headers=headers,
+                timeout=10
+            )
+            
+            # Endpoint should exist but return 400 for missing file
+            if response.status_code in [400, 422]:
+                print(f"✅ PASSED - Receipt Scan endpoint exists (status: {response.status_code})")
+                self.tests_passed += 1
+                return True
+            else:
+                print(f"❌ FAILED - Unexpected status: {response.status_code}")
+                return False
+                
+        except requests.exceptions.RequestException as e:
+            print(f"❌ FAILED - Network Error: {str(e)}")
+            return False
+        finally:
+            self.tests_run += 1
+
+    def test_ai_insights_v2_endpoint(self):
+        """Test AI Insights V2 endpoint with level parameter"""
+        insight_data = {
+            "query": "How is my business performing?",
+            "level": "basic",
+            "include_charts": True
+        }
+        
+        success, response = self.run_test(
+            "AI Insights V2 with Level Parameter (POST /api/ai/insights/v2)",
+            "POST",
+            "/api/ai/insights/v2",
+            200,
+            data=insight_data
+        )
+        
+        if success:
+            # Check for V2 response structure
+            required_fields = ["insight", "level", "metrics"]
+            missing_fields = [field for field in required_fields if field not in response]
+            
+            if not missing_fields and response.get("level") == "basic":
+                print(f"   ✅ AI Insights V2 with level parameter working")
+                return True
+            else:
+                print(f"   ⚠️  Missing V2 fields: {missing_fields}")
+                return False
+        return success
+
     def run_all_tests(self):
         """Run all Monetrax API tests"""
         print("🚀 Starting Monetrax Nigerian MSME Financial Platform API Tests")
