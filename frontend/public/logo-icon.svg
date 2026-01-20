@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <defs>
+    <!-- Gradient for the M icon - Blue to Teal -->
+    <linearGradient id="iconMGradient" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0D5EAE"/>
+      <stop offset="50%" stop-color="#30A9E0"/>
+      <stop offset="100%" stop-color="#00C9B3"/>
+    </linearGradient>
+    
+    <!-- Gradient for the arrow - Teal to Green -->
+    <linearGradient id="iconArrowGradient" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00C9B3"/>
+      <stop offset="100%" stop-color="#77DD4C"/>
+    </linearGradient>
+    
+    <!-- Gradient for swoosh -->
+    <linearGradient id="iconSwooshGradient" x1="0%" y1="50%" x2="100%" y2="50%">
+      <stop offset="0%" stop-color="#30A9E0"/>
+      <stop offset="50%" stop-color="#00C9B3"/>
+      <stop offset="100%" stop-color="#77DD4C"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Outer green swoosh (top right) -->
+  <path d="M50 8 Q78 2 88 30 L80 35 Q72 15 50 18 Z" fill="url(#iconArrowGradient)"/>
+  
+  <!-- Inner blue swoosh (bottom left) -->
+  <path d="M8 70 Q2 40 28 18 L35 28 Q15 45 18 65 Z" fill="url(#iconMGradient)"/>
+  
+  <!-- Main M shape with integrated bar chart -->
+  <g transform="translate(20, 25)">
+    <!-- Left vertical of M -->
+    <rect x="0" y="12" width="10" height="40" rx="3" fill="url(#iconMGradient)"/>
+    
+    <!-- Chart bar 1 (short) -->
+    <rect x="14" y="28" width="8" height="24" rx="2" fill="url(#iconMGradient)"/>
+    
+    <!-- Chart bar 2 (tall - center) -->
+    <rect x="26" y="8" width="8" height="44" rx="2" fill="url(#iconMGradient)"/>
+    
+    <!-- Chart bar 3 (medium) -->
+    <rect x="38" y="18" width="8" height="34" rx="2" fill="url(#iconMGradient)"/>
+    
+    <!-- Right vertical of M -->
+    <rect x="50" y="12" width="10" height="40" rx="3" fill="url(#iconMGradient)"/>
+  </g>
+  
+  <!-- Upward arrow -->
+  <path d="M68 28 L78 12 L88 28 L80 28 L80 40 L76 40 L76 28 Z" fill="url(#iconArrowGradient)"/>
+  
+  <!-- Bottom swoosh -->
+  <path d="M82 72 Q55 90 18 78 L22 70 Q50 80 75 68 Z" fill="url(#iconSwooshGradient)"/>
+</svg>
