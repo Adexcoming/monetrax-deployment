@@ -1907,6 +1907,9 @@ function ReportsPage() {
   const expenseChartData = Object.entries(report?.expenses?.categories || {}).map(([name, value]) => ({ name, value }));
   const monthlyData = chartsData?.monthly_data || [];
 
+  const hasPdfAccess = checkFeatureAccess('pdf_reports');
+  const hasAiAccess = checkFeatureAccess('ai_insights');
+
   return (
     <div className="p-4 lg:p-8 space-y-6" data-testid="reports-page">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -1914,9 +1917,14 @@ function ReportsPage() {
           <h1 className="text-2xl font-bold">Reports & Analytics</h1>
           <p className="text-muted-foreground">Financial statements, charts, and AI insights</p>
         </div>
-        <button onClick={handleExportPDF} className="btn-primary px-4 py-2 rounded-lg inline-flex items-center gap-2" data-testid="export-pdf-btn">
+        <button 
+          onClick={handleExportPDF} 
+          className={`btn-primary px-4 py-2 rounded-lg inline-flex items-center gap-2 ${!hasPdfAccess ? 'opacity-80' : ''}`} 
+          data-testid="export-pdf-btn"
+        >
           <Download className="w-4 h-4" />
           Export PDF Report
+          {!hasPdfAccess && <Crown className="w-3 h-3 text-yellow-300" />}
         </button>
       </div>
 
