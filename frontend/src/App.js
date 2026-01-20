@@ -3156,6 +3156,8 @@ function App() {
                 style: { background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', color: 'hsl(var(--foreground))' },
               }}
             />
+            <NetworkStatus />
+            <PWAInstallPrompt />
             <AppRouter />
           </SubscriptionProvider>
         </AuthProvider>
