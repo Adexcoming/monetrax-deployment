@@ -396,11 +396,12 @@ function DashboardLayout({ children }) {
       <aside className="hidden lg:flex lg:flex-col lg:w-64 border-r border-border bg-card">
         <div className="p-4 border-b border-border">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
-              <TrendingUp className="w-5 h-5 text-white" />
-            </div>
+            <img src="/logo-icon.svg" alt="Monetrax" className="w-10 h-10" />
             <div>
-              <span className="font-bold text-lg">Monetrax</span>
+              <span className="font-bold text-lg">
+                <span className="text-[#1F2A5C] dark:text-white">Mone</span>
+                <span className="text-[#10B981]">trax</span>
+              </span>
               <p className="text-xs text-muted-foreground truncate max-w-[140px]">{business?.business_name || 'Setup Business'}</p>
             </div>
           </div>
