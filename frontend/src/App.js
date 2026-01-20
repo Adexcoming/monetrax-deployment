@@ -399,8 +399,8 @@ function DashboardLayout({ children }) {
             <img src="/logo-icon.svg" alt="Monetrax" className="w-10 h-10" />
             <div>
               <span className="font-bold text-lg">
-                <span className="text-[#1F2A5C] dark:text-white">Mone</span>
-                <span className="text-[#10B981]">trax</span>
+                <span className="text-[#001F4F] dark:text-white">MONE</span>
+                <span className="text-[#22C55E]">TRAX</span>
               </span>
               <p className="text-xs text-muted-foreground truncate max-w-[140px]">{business?.business_name || 'Setup Business'}</p>
             </div>
