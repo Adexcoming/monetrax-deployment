@@ -2094,9 +2094,28 @@ async def get_checkout_status(session_id: str, user: dict = Depends(get_current_
             
             tier_data = SUBSCRIPTION_TIERS.get(tier, SUBSCRIPTION_TIERS["free"])
             
+            # Send receipt email (fire and forget - don't block response)
+            amount_ngn = tier_data["price_yearly"] if billing_cycle == "yearly" else tier_data["price_monthly"]
+            html_content = get_subscription_receipt_html(
+                user_name=user.get("name", "Valued Customer"),
+                tier_name=tier_data["name"],
+                amount=amount_ngn,
+                billing_cycle=billing_cycle,
+                next_billing_date=period_end.strftime("%B %d, %Y")
+            )
+            
+            # Send email asynchronously
+            asyncio.create_task(send_email(
+                to_email=user["email"],
+                subject=f"Payment Confirmation - {tier_data['name']} Plan | Monetrax",
+                html_content=html_content,
+                email_type="subscription_receipt"
+            ))
+            
             return {
                 "status": "complete",
                 "payment_status": "paid",
+                "email_sent": True,
                 "subscription": {
                     "subscription_id": subscription_id,
                     "tier": tier,
