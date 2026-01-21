@@ -85,6 +85,8 @@ class UserResponse(BaseModel):
     email: str
     name: str
     picture: Optional[str] = None
+    role: str = "user"
+    status: str = "active"
     mfa_enabled: bool = False
     mfa_verified: bool = False
 
