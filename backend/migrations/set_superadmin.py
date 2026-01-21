@@ -83,7 +83,7 @@ async def set_superadmin(email: str):
 def main():
     if len(sys.argv) < 2:
         # Default to the specified email if no argument provided
-        email = "eleba@hotmail.co.uk"
+        email = "morayoadewunmi@gmail.com"
         print(f"No email provided, using default: {email}")
     else:
         email = sys.argv[1]
