@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, createContext, useContext } from 'react';
 import { useNavigate, Link, Routes, Route, useLocation } from 'react-router-dom';
 import { formatCurrency } from '../../contexts/SubscriptionContext';
 import { toast } from 'sonner';
@@ -25,6 +25,14 @@ const apiCall = async (endpoint, options = {}) => {
   }
   
   return response.json();
+};
+
+// Local Admin Context to pass user info to child components
+const AdminContext = createContext(null);
+const useAuth = () => {
+  const context = useContext(AdminContext);
+  if (!context) return { user: null };
+  return context;
 };
 
 // Admin Layout with Sidebar
