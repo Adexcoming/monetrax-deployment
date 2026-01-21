@@ -375,6 +375,11 @@ function AdminUsers() {
           <h1 className="text-2xl font-bold">Users</h1>
           <p className="text-muted-foreground">{pagination.total} total users</p>
         </div>
+        {isSuperadmin && (
+          <span className="px-3 py-1 bg-purple-500/10 text-purple-500 text-xs rounded-full font-medium">
+            Superadmin Mode
+          </span>
+        )}
       </div>
 
       {/* Filters */}
