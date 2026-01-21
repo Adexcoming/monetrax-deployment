@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link, Routes, Route, useLocation } from 'react-router-dom';
-import { useAuth, api } from '../../contexts/AuthContext';
 import { formatCurrency } from '../../contexts/SubscriptionContext';
 import { toast } from 'sonner';
 import {
@@ -11,9 +10,28 @@ import {
   Database, Server, Mail, CreditCard, Edit, Save, X, Menu
 } from 'lucide-react';
 
+// API helper for admin dashboard (local implementation to avoid context issues)
+const API_URL = process.env.REACT_APP_BACKEND_URL || '';
+const apiCall = async (endpoint, options = {}) => {
+  const response = await fetch(`${API_URL}${endpoint}`, {
+    ...options,
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', ...options.headers },
+  });
+  
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Request failed' }));
+    throw new Error(error.detail || 'Request failed');
+  }
+  
+  return response.json();
+};
+
 // Admin Layout with Sidebar
-export default function AdminDashboard() {
-  const { user } = useAuth();
+export default function AdminDashboard({ auth, api }) {
+  // Use passed props or fallback to local apiCall
+  const apiFunc = api || apiCall;
+  const user = auth?.user;
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
