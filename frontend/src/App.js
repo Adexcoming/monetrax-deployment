@@ -7,7 +7,7 @@ import {
   Calendar, Plus, FileText, BarChart3, Home, CreditCard, Building2, Sun, Moon, Menu, X,
   ArrowUpRight, ArrowDownRight, Clock, Target, Lightbulb, MessageSquare, Send, Sparkles,
   Upload, Download, Camera, FileSpreadsheet, Loader2, Crown, Zap, Users, Star, CheckCircle2,
-  Wifi, WifiOff, Share2
+  Wifi, WifiOff, Share2, Mail, Phone, ArrowLeft
 } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart as RechartsPie, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import AdminDashboard from './components/pages/AdminDashboard';
