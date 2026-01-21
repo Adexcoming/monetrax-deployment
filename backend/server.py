@@ -2748,6 +2748,808 @@ async def send_test_email(user: dict = Depends(get_current_user)):
     return result
 
 
+# ============== ADMIN SYSTEM ==============
+
+# Admin collections
+admin_logs_collection = db["admin_logs"]
+tax_rules_collection = db["tax_rules"]
+system_settings_collection = db["system_settings"]
+
+
+class AdminUserUpdate(BaseModel):
+    role: Optional[str] = None
+    status: Optional[str] = None
+
+
+class TaxRuleUpdate(BaseModel):
+    vat_rate: Optional[float] = None
+    tax_free_threshold: Optional[float] = None
+    income_tax_brackets: Optional[List[dict]] = None
+
+
+async def log_admin_action(admin_id: str, action: str, target_type: str, target_id: str, details: dict = None):
+    """Log admin actions for audit trail"""
+    await admin_logs_collection.insert_one({
+        "log_id": generate_id("log"),
+        "admin_id": admin_id,
+        "action": action,
+        "target_type": target_type,
+        "target_id": target_id,
+        "details": details or {},
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "ip_address": None  # Can be added from request
+    })
+
+
+# ============== ADMIN OVERVIEW ==============
+
+@app.get("/api/admin/overview")
+async def admin_overview(admin: dict = Depends(require_admin)):
+    """Get admin dashboard overview metrics"""
+    now = datetime.now(timezone.utc)
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    
+    # Total users
+    total_users = await users_collection.count_documents({})
+    active_users = await users_collection.count_documents({"status": {"$ne": "suspended"}})
+    new_users_this_month = await users_collection.count_documents({
+        "created_at": {"$gte": month_start}
+    })
+    
+    # Total businesses
+    total_businesses = await businesses_collection.count_documents({})
+    
+    # Total transactions
+    total_transactions = await transactions_collection.count_documents({})
+    transactions_this_month = await transactions_collection.count_documents({
+        "date": {"$gte": month_start.strftime("%Y-%m-%d")}
+    })
+    
+    # Calculate MRR (Monthly Recurring Revenue)
+    active_subscriptions = await subscriptions_collection.find(
+        {"status": "active", "tier": {"$ne": "free"}},
+        {"_id": 0, "tier": 1, "billing_cycle": 1}
+    ).to_list(length=10000)
+    
+    mrr = 0
+    for sub in active_subscriptions:
+        tier = sub.get("tier", "free")
+        tier_data = SUBSCRIPTION_TIERS.get(tier, {})
+        if sub.get("billing_cycle") == "yearly":
+            mrr += tier_data.get("price_yearly", 0) / 12
+        else:
+            mrr += tier_data.get("price_monthly", 0)
+    
+    # Subscription breakdown
+    sub_breakdown = {
+        "free": await subscriptions_collection.count_documents({"tier": "free"}),
+        "starter": await subscriptions_collection.count_documents({"tier": "starter"}),
+        "business": await subscriptions_collection.count_documents({"tier": "business"}),
+        "enterprise": await subscriptions_collection.count_documents({"tier": "enterprise"})
+    }
+    
+    # Free users (no subscription record = free tier)
+    users_with_sub = await subscriptions_collection.distinct("user_id")
+    sub_breakdown["free"] = total_users - len(users_with_sub) + sub_breakdown.get("free", 0)
+    
+    # System health
+    system_health = {
+        "database": "healthy",
+        "api": "healthy",
+        "email_service": "healthy" if resend.api_key and resend.api_key != "re_demo_key" else "not_configured",
+        "payment_service": "healthy" if os.environ.get("STRIPE_API_KEY") else "not_configured"
+    }
+    
+    # Recent errors (last 24h)
+    yesterday = now - timedelta(days=1)
+    error_logs = await admin_logs_collection.count_documents({
+        "action": "error",
+        "timestamp": {"$gte": yesterday.isoformat()}
+    })
+    
+    return {
+        "users": {
+            "total": total_users,
+            "active": active_users,
+            "suspended": total_users - active_users,
+            "new_this_month": new_users_this_month
+        },
+        "businesses": {
+            "total": total_businesses
+        },
+        "transactions": {
+            "total": total_transactions,
+            "this_month": transactions_this_month
+        },
+        "revenue": {
+            "mrr": round(mrr, 2),
+            "currency": "NGN"
+        },
+        "subscriptions": sub_breakdown,
+        "system_health": system_health,
+        "error_count_24h": error_logs
+    }
+
+
+# ============== ADMIN USERS ==============
+
+@app.get("/api/admin/users")
+async def admin_list_users(
+    page: int = 1,
+    limit: int = 20,
+    search: Optional[str] = None,
+    role: Optional[str] = None,
+    status: Optional[str] = None,
+    admin: dict = Depends(require_admin)
+):
+    """List all users with pagination and filters"""
+    query = {}
+    
+    if search:
+        query["$or"] = [
+            {"email": {"$regex": search, "$options": "i"}},
+            {"name": {"$regex": search, "$options": "i"}},
+            {"user_id": {"$regex": search, "$options": "i"}}
+        ]
+    
+    if role:
+        query["role"] = role
+    
+    if status:
+        query["status"] = status
+    
+    skip = (page - 1) * limit
+    
+    total = await users_collection.count_documents(query)
+    users = await users_collection.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(limit).to_list(length=limit)
+    
+    # Enrich with subscription and business data
+    enriched_users = []
+    for user in users:
+        subscription = await subscriptions_collection.find_one({"user_id": user["user_id"]}, {"_id": 0})
+        business = await businesses_collection.find_one({"user_id": user["user_id"]}, {"_id": 0})
+        
+        enriched_users.append({
+            **user,
+            "subscription_tier": subscription.get("tier", "free") if subscription else "free",
+            "has_business": business is not None,
+            "business_name": business.get("business_name") if business else None
+        })
+    
+    return {
+        "users": enriched_users,
+        "pagination": {
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "pages": (total + limit - 1) // limit
+        }
+    }
+
+
+@app.get("/api/admin/users/{user_id}")
+async def admin_get_user(user_id: str, admin: dict = Depends(require_admin)):
+    """Get detailed user information"""
+    user = await users_collection.find_one({"user_id": user_id}, {"_id": 0})
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Get related data
+    subscription = await subscriptions_collection.find_one({"user_id": user_id}, {"_id": 0})
+    business = await businesses_collection.find_one({"user_id": user_id}, {"_id": 0})
+    mfa = await mfa_collection.find_one({"user_id": user_id}, {"_id": 0})
+    
+    # Transaction stats
+    tx_count = await transactions_collection.count_documents({"business_id": business["business_id"]} if business else {})
+    
+    # Payment history
+    payments = await payment_transactions_collection.find(
+        {"user_id": user_id},
+        {"_id": 0}
+    ).sort("created_at", -1).limit(10).to_list(length=10)
+    
+    return {
+        "user": user,
+        "subscription": subscription,
+        "business": business,
+        "mfa_enabled": mfa.get("totp_enabled", False) if mfa else False,
+        "transaction_count": tx_count,
+        "payment_history": payments
+    }
+
+
+@app.patch("/api/admin/users/{user_id}")
+async def admin_update_user(user_id: str, update: AdminUserUpdate, admin: dict = Depends(require_admin)):
+    """Update user role or status"""
+    user = await users_collection.find_one({"user_id": user_id}, {"_id": 0})
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    update_data = {}
+    
+    if update.role is not None:
+        # Only superadmin can change roles
+        if admin.get("role") != "superadmin" and update.role in ["admin", "superadmin"]:
+            raise HTTPException(status_code=403, detail="Only superadmin can assign admin roles")
+        
+        if update.role not in ["user", "admin", "superadmin"]:
+            raise HTTPException(status_code=400, detail="Invalid role")
+        
+        update_data["role"] = update.role
+    
+    if update.status is not None:
+        if update.status not in ["active", "suspended"]:
+            raise HTTPException(status_code=400, detail="Invalid status")
+        
+        update_data["status"] = update.status
+    
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No updates provided")
+    
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    
+    await users_collection.update_one({"user_id": user_id}, {"$set": update_data})
+    
+    # Log the action
+    await log_admin_action(
+        admin_id=admin["user_id"],
+        action="user_update",
+        target_type="user",
+        target_id=user_id,
+        details={"changes": update_data}
+    )
+    
+    return {"status": "success", "message": "User updated", "updates": update_data}
+
+
+@app.post("/api/admin/users/{user_id}/suspend")
+async def admin_suspend_user(user_id: str, admin: dict = Depends(require_admin)):
+    """Suspend a user account"""
+    user = await users_collection.find_one({"user_id": user_id}, {"_id": 0})
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    if user.get("role") in ["admin", "superadmin"] and admin.get("role") != "superadmin":
+        raise HTTPException(status_code=403, detail="Cannot suspend admin users")
+    
+    await users_collection.update_one(
+        {"user_id": user_id},
+        {"$set": {"status": "suspended", "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    
+    # Invalidate all sessions
+    await sessions_collection.delete_many({"user_id": user_id})
+    
+    await log_admin_action(admin["user_id"], "user_suspend", "user", user_id)
+    
+    return {"status": "success", "message": "User suspended"}
+
+
+@app.post("/api/admin/users/{user_id}/activate")
+async def admin_activate_user(user_id: str, admin: dict = Depends(require_admin)):
+    """Activate a suspended user account"""
+    user = await users_collection.find_one({"user_id": user_id}, {"_id": 0})
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    await users_collection.update_one(
+        {"user_id": user_id},
+        {"$set": {"status": "active", "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    
+    await log_admin_action(admin["user_id"], "user_activate", "user", user_id)
+    
+    return {"status": "success", "message": "User activated"}
+
+
+# ============== ADMIN BUSINESSES ==============
+
+@app.get("/api/admin/businesses")
+async def admin_list_businesses(
+    page: int = 1,
+    limit: int = 20,
+    search: Optional[str] = None,
+    industry: Optional[str] = None,
+    admin: dict = Depends(require_admin)
+):
+    """List all businesses"""
+    query = {}
+    
+    if search:
+        query["$or"] = [
+            {"business_name": {"$regex": search, "$options": "i"}},
+            {"business_id": {"$regex": search, "$options": "i"}}
+        ]
+    
+    if industry:
+        query["industry"] = industry
+    
+    skip = (page - 1) * limit
+    
+    total = await businesses_collection.count_documents(query)
+    businesses = await businesses_collection.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(limit).to_list(length=limit)
+    
+    # Enrich with user and transaction data
+    enriched = []
+    for biz in businesses:
+        user = await users_collection.find_one({"user_id": biz["user_id"]}, {"_id": 0, "email": 1, "name": 1})
+        tx_count = await transactions_collection.count_documents({"business_id": biz["business_id"]})
+        
+        # Calculate tax readiness
+        transactions = await transactions_collection.find({"business_id": biz["business_id"]}, {"_id": 0}).to_list(length=1000)
+        tax_readiness = calculate_tax_readiness(transactions, bool(biz.get("tin")))
+        
+        enriched.append({
+            **biz,
+            "owner_email": user.get("email") if user else None,
+            "owner_name": user.get("name") if user else None,
+            "transaction_count": tx_count,
+            "tax_readiness_score": tax_readiness
+        })
+    
+    return {
+        "businesses": enriched,
+        "pagination": {
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "pages": (total + limit - 1) // limit
+        }
+    }
+
+
+@app.get("/api/admin/businesses/{business_id}")
+async def admin_get_business(business_id: str, admin: dict = Depends(require_admin)):
+    """Get detailed business information"""
+    business = await businesses_collection.find_one({"business_id": business_id}, {"_id": 0})
+    
+    if not business:
+        raise HTTPException(status_code=404, detail="Business not found")
+    
+    user = await users_collection.find_one({"user_id": business["user_id"]}, {"_id": 0})
+    subscription = await subscriptions_collection.find_one({"user_id": business["user_id"]}, {"_id": 0})
+    
+    # Financial summary
+    transactions = await transactions_collection.find({"business_id": business_id}, {"_id": 0}).to_list(length=10000)
+    
+    income = sum(t["amount"] for t in transactions if t.get("type") == "income")
+    expenses = sum(t["amount"] for t in transactions if t.get("type") == "expense")
+    
+    tax_readiness = calculate_tax_readiness(transactions, bool(business.get("tin")))
+    
+    return {
+        "business": business,
+        "owner": user,
+        "subscription": subscription,
+        "financial_summary": {
+            "total_income": income,
+            "total_expenses": expenses,
+            "net_profit": income - expenses,
+            "transaction_count": len(transactions)
+        },
+        "tax_readiness_score": tax_readiness,
+        "compliance_status": "compliant" if tax_readiness >= 70 else "needs_attention" if tax_readiness >= 40 else "at_risk"
+    }
+
+
+# ============== ADMIN TRANSACTIONS ==============
+
+@app.get("/api/admin/transactions")
+async def admin_list_transactions(
+    page: int = 1,
+    limit: int = 50,
+    type: Optional[str] = None,
+    category: Optional[str] = None,
+    min_amount: Optional[float] = None,
+    max_amount: Optional[float] = None,
+    flagged: Optional[bool] = None,
+    admin: dict = Depends(require_admin)
+):
+    """List all transactions globally with filters"""
+    query = {}
+    
+    if type:
+        query["type"] = type
+    
+    if category:
+        query["category"] = category
+    
+    if min_amount is not None:
+        query["amount"] = {"$gte": min_amount}
+    
+    if max_amount is not None:
+        if "amount" in query:
+            query["amount"]["$lte"] = max_amount
+        else:
+            query["amount"] = {"$lte": max_amount}
+    
+    if flagged is not None:
+        query["flagged"] = flagged
+    
+    skip = (page - 1) * limit
+    
+    total = await transactions_collection.count_documents(query)
+    transactions = await transactions_collection.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(limit).to_list(length=limit)
+    
+    # Enrich with business names
+    enriched = []
+    for tx in transactions:
+        business = await businesses_collection.find_one({"business_id": tx.get("business_id")}, {"_id": 0, "business_name": 1})
+        enriched.append({
+            **tx,
+            "business_name": business.get("business_name") if business else "Unknown"
+        })
+    
+    # Calculate totals
+    total_income = sum(t["amount"] for t in enriched if t.get("type") == "income")
+    total_expense = sum(t["amount"] for t in enriched if t.get("type") == "expense")
+    
+    return {
+        "transactions": enriched,
+        "totals": {
+            "income": total_income,
+            "expense": total_expense
+        },
+        "pagination": {
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "pages": (total + limit - 1) // limit
+        }
+    }
+
+
+@app.post("/api/admin/transactions/{transaction_id}/flag")
+async def admin_flag_transaction(transaction_id: str, reason: str = "", admin: dict = Depends(require_admin)):
+    """Flag a transaction as suspicious"""
+    tx = await transactions_collection.find_one({"transaction_id": transaction_id}, {"_id": 0})
+    
+    if not tx:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    await transactions_collection.update_one(
+        {"transaction_id": transaction_id},
+        {"$set": {
+            "flagged": True,
+            "flag_reason": reason,
+            "flagged_by": admin["user_id"],
+            "flagged_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    await log_admin_action(admin["user_id"], "transaction_flag", "transaction", transaction_id, {"reason": reason})
+    
+    return {"status": "success", "message": "Transaction flagged"}
+
+
+@app.post("/api/admin/transactions/{transaction_id}/unflag")
+async def admin_unflag_transaction(transaction_id: str, admin: dict = Depends(require_admin)):
+    """Remove flag from a transaction"""
+    tx = await transactions_collection.find_one({"transaction_id": transaction_id}, {"_id": 0})
+    
+    if not tx:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    await transactions_collection.update_one(
+        {"transaction_id": transaction_id},
+        {"$unset": {"flagged": "", "flag_reason": "", "flagged_by": "", "flagged_at": ""}}
+    )
+    
+    await log_admin_action(admin["user_id"], "transaction_unflag", "transaction", transaction_id)
+    
+    return {"status": "success", "message": "Transaction unflagged"}
+
+
+# ============== ADMIN TAX ENGINE ==============
+
+@app.get("/api/admin/tax-rules")
+async def admin_get_tax_rules(admin: dict = Depends(require_admin)):
+    """Get current tax rules configuration"""
+    rules = await tax_rules_collection.find_one({"active": True}, {"_id": 0})
+    
+    if not rules:
+        # Return defaults
+        rules = {
+            "vat_rate": VAT_RATE,
+            "tax_free_threshold": TAX_FREE_THRESHOLD,
+            "income_tax_brackets": [
+                {"amount": 300000, "rate": 0.07},
+                {"amount": 300000, "rate": 0.11},
+                {"amount": 500000, "rate": 0.15},
+                {"amount": 500000, "rate": 0.19},
+                {"amount": 1600000, "rate": 0.21},
+                {"amount": float("inf"), "rate": 0.24}
+            ],
+            "effective_date": "2025-01-01",
+            "active": True
+        }
+    
+    return rules
+
+
+@app.put("/api/admin/tax-rules")
+async def admin_update_tax_rules(update: TaxRuleUpdate, admin: dict = Depends(require_superadmin)):
+    """Update tax rules (superadmin only)"""
+    update_data = {"updated_at": datetime.now(timezone.utc).isoformat(), "updated_by": admin["user_id"]}
+    
+    if update.vat_rate is not None:
+        if not 0 <= update.vat_rate <= 1:
+            raise HTTPException(status_code=400, detail="VAT rate must be between 0 and 1")
+        update_data["vat_rate"] = update.vat_rate
+    
+    if update.tax_free_threshold is not None:
+        if update.tax_free_threshold < 0:
+            raise HTTPException(status_code=400, detail="Tax free threshold must be positive")
+        update_data["tax_free_threshold"] = update.tax_free_threshold
+    
+    if update.income_tax_brackets is not None:
+        update_data["income_tax_brackets"] = update.income_tax_brackets
+    
+    # Deactivate old rules and create new
+    await tax_rules_collection.update_many({"active": True}, {"$set": {"active": False}})
+    
+    current_rules = await tax_rules_collection.find_one({"active": False}, {"_id": 0})
+    new_rules = {**(current_rules or {}), **update_data, "active": True, "effective_date": datetime.now(timezone.utc).strftime("%Y-%m-%d")}
+    new_rules.pop("_id", None)
+    
+    await tax_rules_collection.insert_one(new_rules)
+    
+    await log_admin_action(admin["user_id"], "tax_rules_update", "system", "tax_rules", update_data)
+    
+    return {"status": "success", "message": "Tax rules updated", "rules": new_rules}
+
+
+# ============== ADMIN SUBSCRIPTIONS ==============
+
+@app.get("/api/admin/subscriptions")
+async def admin_list_subscriptions(
+    page: int = 1,
+    limit: int = 20,
+    tier: Optional[str] = None,
+    status: Optional[str] = None,
+    admin: dict = Depends(require_admin)
+):
+    """List all subscriptions"""
+    query = {}
+    
+    if tier:
+        query["tier"] = tier
+    
+    if status:
+        query["status"] = status
+    
+    skip = (page - 1) * limit
+    
+    total = await subscriptions_collection.count_documents(query)
+    subscriptions = await subscriptions_collection.find(query, {"_id": 0}).sort("updated_at", -1).skip(skip).limit(limit).to_list(length=limit)
+    
+    # Enrich with user data
+    enriched = []
+    for sub in subscriptions:
+        user = await users_collection.find_one({"user_id": sub["user_id"]}, {"_id": 0, "email": 1, "name": 1})
+        tier_data = SUBSCRIPTION_TIERS.get(sub.get("tier", "free"), {})
+        enriched.append({
+            **sub,
+            "user_email": user.get("email") if user else None,
+            "user_name": user.get("name") if user else None,
+            "tier_name": tier_data.get("name", "Free"),
+            "price_monthly": tier_data.get("price_monthly", 0)
+        })
+    
+    return {
+        "subscriptions": enriched,
+        "pagination": {
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "pages": (total + limit - 1) // limit
+        }
+    }
+
+
+@app.post("/api/admin/subscriptions/{user_id}/override")
+async def admin_override_subscription(
+    user_id: str,
+    tier: str,
+    duration_days: int = 30,
+    admin: dict = Depends(require_superadmin)
+):
+    """Override a user's subscription (superadmin only)"""
+    user = await users_collection.find_one({"user_id": user_id}, {"_id": 0})
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    if tier not in SUBSCRIPTION_TIERS:
+        raise HTTPException(status_code=400, detail="Invalid tier")
+    
+    now = datetime.now(timezone.utc)
+    period_end = now + timedelta(days=duration_days)
+    
+    await subscriptions_collection.update_one(
+        {"user_id": user_id},
+        {"$set": {
+            "subscription_id": generate_id("sub"),
+            "user_id": user_id,
+            "tier": tier,
+            "status": "active",
+            "billing_cycle": "manual_override",
+            "current_period_start": now.isoformat(),
+            "current_period_end": period_end.isoformat(),
+            "override_by": admin["user_id"],
+            "updated_at": now.isoformat()
+        }},
+        upsert=True
+    )
+    
+    await log_admin_action(admin["user_id"], "subscription_override", "subscription", user_id, {"tier": tier, "duration_days": duration_days})
+    
+    return {"status": "success", "message": f"Subscription overridden to {tier} for {duration_days} days"}
+
+
+# ============== ADMIN LOGS ==============
+
+@app.get("/api/admin/logs")
+async def admin_get_logs(
+    page: int = 1,
+    limit: int = 50,
+    action: Optional[str] = None,
+    admin_id: Optional[str] = None,
+    target_type: Optional[str] = None,
+    admin: dict = Depends(require_admin)
+):
+    """Get admin action logs"""
+    query = {}
+    
+    if action:
+        query["action"] = action
+    
+    if admin_id:
+        query["admin_id"] = admin_id
+    
+    if target_type:
+        query["target_type"] = target_type
+    
+    skip = (page - 1) * limit
+    
+    total = await admin_logs_collection.count_documents(query)
+    logs = await admin_logs_collection.find(query, {"_id": 0}).sort("timestamp", -1).skip(skip).limit(limit).to_list(length=limit)
+    
+    # Enrich with admin names
+    enriched = []
+    for log in logs:
+        admin_user = await users_collection.find_one({"user_id": log.get("admin_id")}, {"_id": 0, "name": 1, "email": 1})
+        enriched.append({
+            **log,
+            "admin_name": admin_user.get("name") if admin_user else "Unknown",
+            "admin_email": admin_user.get("email") if admin_user else None
+        })
+    
+    return {
+        "logs": enriched,
+        "pagination": {
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "pages": (total + limit - 1) // limit
+        }
+    }
+
+
+@app.get("/api/admin/logs/errors")
+async def admin_get_error_logs(
+    page: int = 1,
+    limit: int = 50,
+    admin: dict = Depends(require_admin)
+):
+    """Get system error logs"""
+    query = {"action": "error"}
+    
+    skip = (page - 1) * limit
+    
+    total = await admin_logs_collection.count_documents(query)
+    logs = await admin_logs_collection.find(query, {"_id": 0}).sort("timestamp", -1).skip(skip).limit(limit).to_list(length=limit)
+    
+    return {
+        "logs": logs,
+        "pagination": {
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "pages": (total + limit - 1) // limit
+        }
+    }
+
+
+@app.get("/api/admin/logs/api-calls")
+async def admin_get_api_logs(
+    page: int = 1,
+    limit: int = 100,
+    admin: dict = Depends(require_admin)
+):
+    """Get recent API call statistics"""
+    # This would typically come from a logging middleware
+    # For now, return email logs as example
+    email_logs = await email_logs_collection.find({}, {"_id": 0}).sort("sent_at", -1).limit(limit).to_list(length=limit)
+    
+    return {
+        "email_logs": email_logs,
+        "total_email_sent": await email_logs_collection.count_documents({"status": "sent"}),
+        "total_email_failed": await email_logs_collection.count_documents({"status": "failed"})
+    }
+
+
+# ============== ADMIN SYSTEM SETTINGS ==============
+
+@app.get("/api/admin/settings")
+async def admin_get_settings(admin: dict = Depends(require_superadmin)):
+    """Get system settings (superadmin only)"""
+    settings = await system_settings_collection.find_one({"type": "global"}, {"_id": 0})
+    
+    if not settings:
+        settings = {
+            "type": "global",
+            "maintenance_mode": False,
+            "registration_enabled": True,
+            "email_notifications_enabled": True,
+            "max_transactions_per_month_free": 50
+        }
+    
+    return settings
+
+
+@app.put("/api/admin/settings")
+async def admin_update_settings(settings: dict, admin: dict = Depends(require_superadmin)):
+    """Update system settings (superadmin only)"""
+    settings["updated_at"] = datetime.now(timezone.utc).isoformat()
+    settings["updated_by"] = admin["user_id"]
+    settings["type"] = "global"
+    
+    await system_settings_collection.update_one(
+        {"type": "global"},
+        {"$set": settings},
+        upsert=True
+    )
+    
+    await log_admin_action(admin["user_id"], "settings_update", "system", "settings", settings)
+    
+    return {"status": "success", "message": "Settings updated"}
+
+
+# ============== ADMIN SEED (for initial setup) ==============
+
+@app.post("/api/admin/seed-superadmin")
+async def seed_superadmin(email: str, secret_key: str):
+    """One-time endpoint to create first superadmin. Requires secret key."""
+    # Security: Only works if no superadmins exist and correct secret is provided
+    existing_superadmin = await users_collection.find_one({"role": "superadmin"})
+    
+    if existing_superadmin:
+        raise HTTPException(status_code=400, detail="Superadmin already exists")
+    
+    # Check secret key (should match JWT_SECRET or a dedicated admin seed key)
+    expected_secret = os.environ.get("JWT_SECRET", "")
+    if secret_key != expected_secret:
+        raise HTTPException(status_code=403, detail="Invalid secret key")
+    
+    # Find user by email and promote to superadmin
+    user = await users_collection.find_one({"email": email})
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found. Please login first to create account.")
+    
+    await users_collection.update_one(
+        {"email": email},
+        {"$set": {"role": "superadmin", "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    
+    return {"status": "success", "message": f"User {email} promoted to superadmin"}
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8001)
