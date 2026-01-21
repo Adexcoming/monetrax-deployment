@@ -154,11 +154,13 @@ Monetrax is now available as a PWA that can be installed on both Android and iOS
 - ✅ Subscription System
 - ✅ Email Notifications
 - ✅ PWA Implementation
+- ✅ Admin System with RBAC
 
 ### P1 - High Priority (Next)
+- Frontend component refactoring (App.js is 3000+ lines)
+- Email notifications for tax deadlines (scheduled cron job)
 - Push notification integration for tax reminders
 - WhatsApp integration for transaction recording
-- Complete frontend component refactoring
 
 ### P2 - Medium Priority
 - Multi-currency support
