@@ -8,6 +8,7 @@ import secrets
 import base64
 import io
 import re
+import random
 import asyncio
 import logging
 from datetime import datetime, timezone, timedelta
@@ -18,6 +19,7 @@ import pyotp
 import qrcode
 import httpx
 import resend
+import bcrypt
 from fastapi import FastAPI, HTTPException, Request, Response, Depends, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, EmailStr
