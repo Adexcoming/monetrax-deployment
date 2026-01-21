@@ -720,6 +720,9 @@ function DashboardLayout({ children }) {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  // Check if user is admin
+  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
+
   const navItems = [
     { path: '/dashboard', icon: Home, label: 'Dashboard' },
     { path: '/transactions', icon: Receipt, label: 'Transactions' },
@@ -728,6 +731,11 @@ function DashboardLayout({ children }) {
     { path: '/subscription', icon: Crown, label: 'Subscription' },
     { path: '/settings', icon: Settings, label: 'Settings' },
   ];
+
+  // Add admin link if user is admin
+  if (isAdmin) {
+    navItems.push({ path: '/admin', icon: Shield, label: 'Admin', isAdmin: true });
+  }
 
   const handleLogout = async () => {
     await logout();
