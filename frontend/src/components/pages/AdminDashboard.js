@@ -294,7 +294,11 @@ function AdminUsers() {
   const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 });
   const [showTierModal, setShowTierModal] = useState(null);
   const [selectedTier, setSelectedTier] = useState('free');
+  const [actionLoading, setActionLoading] = useState(null);
   const navigate = useNavigate();
+
+  // Check if current user is superadmin
+  const isSuperadmin = currentUser?.role === 'superadmin';
 
   useEffect(() => {
     fetchUsers();
