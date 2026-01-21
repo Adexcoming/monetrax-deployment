@@ -7,7 +7,7 @@ import pytest
 import requests
 import os
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://tax-track.preview.emergentagent.com')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://monetrax-admin.preview.emergentagent.com')
 
 # Test session token created via MongoDB
 TEST_SESSION_TOKEN = "test_session_tier_1768932992031"

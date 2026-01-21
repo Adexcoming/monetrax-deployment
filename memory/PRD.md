@@ -17,13 +17,13 @@ Monetrax is now available as a PWA that can be installed on both Android and iOS
 ### Installation Instructions
 
 **Android (Chrome):**
-1. Visit https://tax-track.preview.emergentagent.com
+1. Visit https://monetrax-admin.preview.emergentagent.com
 2. Tap the "Install Monetrax" banner at the bottom
 3. Or tap ⋮ menu → "Add to Home Screen"
 4. The app icon will appear on your home screen
 
 **iOS (Safari):**
-1. Visit https://tax-track.preview.emergentagent.com
+1. Visit https://monetrax-admin.preview.emergentagent.com
 2. Tap the Share button (box with arrow)
 3. Scroll down and tap "Add to Home Screen"
 4. Tap "Add" in the top right

@@ -6,7 +6,7 @@ import pytest
 import requests
 import os
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://tax-track.preview.emergentagent.com')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://monetrax-admin.preview.emergentagent.com')
 
 # Test session token created via MongoDB
 TEST_SESSION_TOKEN = "test_session_1768931670935"
@@ -141,7 +141,7 @@ class TestCheckoutSession:
         response = requests.post(
             f"{BASE_URL}/api/subscriptions/checkout",
             headers={"Authorization": f"Bearer {TEST_SESSION_TOKEN}"},
-            json={"tier": "starter", "billing_cycle": "monthly", "origin_url": "https://tax-track.preview.emergentagent.com"}
+            json={"tier": "starter", "billing_cycle": "monthly", "origin_url": "https://monetrax-admin.preview.emergentagent.com"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -155,7 +155,7 @@ class TestCheckoutSession:
         response = requests.post(
             f"{BASE_URL}/api/subscriptions/checkout",
             headers={"Authorization": f"Bearer {TEST_SESSION_TOKEN}"},
-            json={"tier": "business", "billing_cycle": "monthly", "origin_url": "https://tax-track.preview.emergentagent.com"}
+            json={"tier": "business", "billing_cycle": "monthly", "origin_url": "https://monetrax-admin.preview.emergentagent.com"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -166,7 +166,7 @@ class TestCheckoutSession:
         response = requests.post(
             f"{BASE_URL}/api/subscriptions/checkout",
             headers={"Authorization": f"Bearer {TEST_SESSION_TOKEN}"},
-            json={"tier": "enterprise", "billing_cycle": "yearly", "origin_url": "https://tax-track.preview.emergentagent.com"}
+            json={"tier": "enterprise", "billing_cycle": "yearly", "origin_url": "https://monetrax-admin.preview.emergentagent.com"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -206,7 +206,7 @@ class TestCheckoutStatus:
         checkout_response = requests.post(
             f"{BASE_URL}/api/subscriptions/checkout",
             headers={"Authorization": f"Bearer {TEST_SESSION_TOKEN}"},
-            json={"tier": "starter", "billing_cycle": "monthly", "origin_url": "https://tax-track.preview.emergentagent.com"}
+            json={"tier": "starter", "billing_cycle": "monthly", "origin_url": "https://monetrax-admin.preview.emergentagent.com"}
         )
         session_id = checkout_response.json()["session_id"]
         
