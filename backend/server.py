@@ -93,6 +93,33 @@ class UserResponse(BaseModel):
     mfa_verified: bool = False
 
 
+# Email/Password Auth Models
+class EmailSignupRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(..., min_length=8)
+    name: str = Field(..., min_length=2)
+
+
+class EmailLoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+
+# Phone Auth Models
+class PhoneSignupRequest(BaseModel):
+    phone: str = Field(..., pattern=r'^\+?[0-9]{10,15}$')
+    name: str = Field(..., min_length=2)
+
+
+class PhoneVerifyRequest(BaseModel):
+    phone: str
+    code: str = Field(..., min_length=6, max_length=6)
+
+
+class PhoneSendOTPRequest(BaseModel):
+    phone: str = Field(..., pattern=r'^\+?[0-9]{10,15}$')
+
+
 class BusinessCreate(BaseModel):
     business_name: str
     business_type: str = "Sole Proprietorship"
