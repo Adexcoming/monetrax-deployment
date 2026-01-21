@@ -279,11 +279,32 @@ async def get_current_user(request: Request) -> dict:
     if not user_doc:
         raise HTTPException(status_code=401, detail="User not found")
     
+    # Check if user is suspended
+    if user_doc.get("status") == "suspended":
+        raise HTTPException(status_code=403, detail="Account suspended")
+    
     mfa_doc = await mfa_collection.find_one({"user_id": user_doc["user_id"]}, {"_id": 0})
     user_doc["mfa_enabled"] = mfa_doc.get("totp_enabled", False) if mfa_doc else False
     user_doc["mfa_verified"] = session_doc.get("mfa_verified", False)
+    user_doc["role"] = user_doc.get("role", "user")  # Default to user role
     
     return user_doc
+
+
+async def require_admin(user: dict = Depends(get_current_user)) -> dict:
+    """Require admin or superadmin role"""
+    role = user.get("role", "user")
+    if role not in ["admin", "superadmin"]:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return user
+
+
+async def require_superadmin(user: dict = Depends(get_current_user)) -> dict:
+    """Require superadmin role"""
+    role = user.get("role", "user")
+    if role != "superadmin":
+        raise HTTPException(status_code=403, detail="Superadmin access required")
+    return user
 
 
 async def get_user_business(user_id: str) -> Optional[dict]:
