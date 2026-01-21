@@ -3252,7 +3252,7 @@ async def admin_get_tax_rules(admin: dict = Depends(require_admin)):
     rules = await tax_rules_collection.find_one({"active": True}, {"_id": 0})
     
     if not rules:
-        # Return defaults
+        # Return defaults (use "unlimited" string instead of float('inf') for JSON serialization)
         rules = {
             "vat_rate": VAT_RATE,
             "tax_free_threshold": TAX_FREE_THRESHOLD,
@@ -3262,7 +3262,7 @@ async def admin_get_tax_rules(admin: dict = Depends(require_admin)):
                 {"amount": 500000, "rate": 0.15},
                 {"amount": 500000, "rate": 0.19},
                 {"amount": 1600000, "rate": 0.21},
-                {"amount": float("inf"), "rate": 0.24}
+                {"amount": "unlimited", "rate": 0.24}
             ],
             "effective_date": "2025-01-01",
             "active": True
