@@ -498,6 +498,403 @@ function MonetaxLogo({ size = 'md', showText = true }) {
   );
 }
 
+// ============== AUTH MODAL ==============
+function AuthModal({ isOpen, onClose, mode, setMode, method, setMethod, onGoogleLogin }) {
+  const navigate = useNavigate();
+  const { login } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  
+  // Email auth state
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  
+  // Phone auth state
+  const [phone, setPhone] = useState('');
+  const [otp, setOtp] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
+  const [tempToken, setTempToken] = useState(null);
+  const [isNewPhoneUser, setIsNewPhoneUser] = useState(false);
+
+  const resetState = () => {
+    setEmail('');
+    setPassword('');
+    setName('');
+    setPhone('');
+    setOtp('');
+    setOtpSent(false);
+    setTempToken(null);
+    setIsNewPhoneUser(false);
+    setShowPassword(false);
+  };
+
+  const handleBack = () => {
+    if (otpSent) {
+      setOtpSent(false);
+      setOtp('');
+    } else {
+      setMethod(null);
+      resetState();
+    }
+  };
+
+  // Email signup
+  const handleEmailSignup = async (e) => {
+    e.preventDefault();
+    if (!name || !email || !password) {
+      toast.error('Please fill in all fields');
+      return;
+    }
+    if (password.length < 8) {
+      toast.error('Password must be at least 8 characters');
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      const result = await api('/api/auth/email/signup', {
+        method: 'POST',
+        body: JSON.stringify({ email, password, name })
+      });
+      login(result);
+      toast.success('Account created successfully!');
+      onClose();
+      navigate('/dashboard');
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Email login
+  const handleEmailLogin = async (e) => {
+    e.preventDefault();
+    if (!email || !password) {
+      toast.error('Please fill in all fields');
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      const result = await api('/api/auth/email/login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password })
+      });
+      login(result);
+      toast.success(`Welcome back, ${result.name}!`);
+      if (['admin', 'superadmin'].includes(result.role)) {
+        navigate('/admin');
+      } else {
+        navigate('/dashboard');
+      }
+      onClose();
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Send OTP
+  const handleSendOTP = async (e) => {
+    e.preventDefault();
+    if (!phone) {
+      toast.error('Please enter your phone number');
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      const result = await api('/api/auth/phone/send-otp', {
+        method: 'POST',
+        body: JSON.stringify({ phone })
+      });
+      setOtpSent(true);
+      setIsNewPhoneUser(result.is_new_user);
+      toast.success('OTP sent to your phone');
+      // For development: show OTP in toast
+      if (result.dev_otp) {
+        toast.info(`Development OTP: ${result.dev_otp}`, { duration: 10000 });
+      }
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Verify OTP
+  const handleVerifyOTP = async (e) => {
+    e.preventDefault();
+    if (!otp || otp.length !== 6) {
+      toast.error('Please enter the 6-digit OTP');
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      const result = await api('/api/auth/phone/verify', {
+        method: 'POST',
+        body: JSON.stringify({ phone, code: otp })
+      });
+      
+      if (result.status === 'needs_registration') {
+        setTempToken(result.temp_token);
+        setIsNewPhoneUser(true);
+        toast.success('Phone verified! Please enter your name.');
+      } else {
+        login(result);
+        toast.success(`Welcome back, ${result.name}!`);
+        if (['admin', 'superadmin'].includes(result.role)) {
+          navigate('/admin');
+        } else {
+          navigate('/dashboard');
+        }
+        onClose();
+      }
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Complete phone signup
+  const handlePhoneSignupComplete = async (e) => {
+    e.preventDefault();
+    if (!name) {
+      toast.error('Please enter your name');
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      const result = await api('/api/auth/phone/complete-signup', {
+        method: 'POST',
+        body: JSON.stringify({ temp_token: tempToken, name })
+      });
+      login(result);
+      toast.success('Account created successfully!');
+      onClose();
+      navigate('/dashboard');
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="glass rounded-3xl p-8 max-w-md w-full animate-fade-in" onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          {method ? (
+            <button onClick={handleBack} className="p-2 hover:bg-secondary rounded-lg">
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+          ) : (
+            <div />
+          )}
+          <h2 className="text-xl font-bold">
+            {mode === 'signup' ? 'Create Account' : 'Welcome Back'}
+          </h2>
+          <button onClick={onClose} className="p-2 hover:bg-secondary rounded-lg">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Method Selection */}
+        {!method && (
+          <div className="space-y-4">
+            {/* Google */}
+            <button
+              onClick={onGoogleLogin}
+              className="w-full flex items-center justify-center gap-3 bg-white dark:bg-gray-800 border border-border hover:bg-gray-50 dark:hover:bg-gray-700 text-foreground px-4 py-3 rounded-xl font-medium transition-colors"
+            >
+              <svg className="w-5 h-5" viewBox="0 0 24 24">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+              </svg>
+              Continue with Google
+            </button>
+
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-border"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-2 bg-card text-muted-foreground">or</span>
+              </div>
+            </div>
+
+            {/* Email */}
+            <button
+              onClick={() => setMethod('email')}
+              className="w-full flex items-center justify-center gap-3 bg-secondary hover:bg-secondary/80 px-4 py-3 rounded-xl font-medium transition-colors"
+            >
+              <Mail className="w-5 h-5" />
+              Continue with Email
+            </button>
+
+            {/* Phone */}
+            <button
+              onClick={() => setMethod('phone')}
+              className="w-full flex items-center justify-center gap-3 bg-secondary hover:bg-secondary/80 px-4 py-3 rounded-xl font-medium transition-colors"
+            >
+              <Phone className="w-5 h-5" />
+              Continue with Phone
+            </button>
+
+            {/* Toggle mode */}
+            <p className="text-center text-sm text-muted-foreground mt-6">
+              {mode === 'signup' ? (
+                <>Already have an account? <button onClick={() => setMode('login')} className="text-emerald-500 hover:underline font-medium">Sign in</button></>
+              ) : (
+                <>Don't have an account? <button onClick={() => setMode('signup')} className="text-emerald-500 hover:underline font-medium">Sign up</button></>
+              )}
+            </p>
+          </div>
+        )}
+
+        {/* Email Form */}
+        {method === 'email' && (
+          <form onSubmit={mode === 'signup' ? handleEmailSignup : handleEmailLogin} className="space-y-4">
+            {mode === 'signup' && (
+              <div>
+                <label className="block text-sm font-medium mb-2">Full Name</label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="John Doe"
+                  className="w-full bg-secondary/50 border border-border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  required
+                />
+              </div>
+            )}
+            <div>
+              <label className="block text-sm font-medium mb-2">Email Address</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                className="w-full bg-secondary/50 border border-border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-2">Password</label>
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder={mode === 'signup' ? 'Min 8 characters' : '••••••••'}
+                  className="w-full bg-secondary/50 border border-border rounded-xl px-4 py-3 pr-12 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
+            </div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white py-3 rounded-xl font-medium transition-colors disabled:opacity-50"
+            >
+              {loading ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : (mode === 'signup' ? 'Create Account' : 'Sign In')}
+            </button>
+          </form>
+        )}
+
+        {/* Phone Form */}
+        {method === 'phone' && !tempToken && (
+          <form onSubmit={otpSent ? handleVerifyOTP : handleSendOTP} className="space-y-4">
+            {!otpSent ? (
+              <div>
+                <label className="block text-sm font-medium mb-2">Phone Number</label>
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="08012345678"
+                  className="w-full bg-secondary/50 border border-border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  required
+                />
+                <p className="text-xs text-muted-foreground mt-2">We'll send you a verification code</p>
+              </div>
+            ) : (
+              <div>
+                <label className="block text-sm font-medium mb-2">Enter OTP</label>
+                <input
+                  type="text"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="000000"
+                  className="w-full bg-secondary/50 border border-border rounded-xl px-4 py-3 text-center text-2xl tracking-widest focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  maxLength={6}
+                  required
+                />
+                <p className="text-xs text-muted-foreground mt-2 text-center">
+                  Didn't receive code? <button type="button" onClick={() => { setOtpSent(false); setOtp(''); }} className="text-emerald-500 hover:underline">Resend</button>
+                </p>
+              </div>
+            )}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white py-3 rounded-xl font-medium transition-colors disabled:opacity-50"
+            >
+              {loading ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : (otpSent ? 'Verify OTP' : 'Send OTP')}
+            </button>
+          </form>
+        )}
+
+        {/* Phone Signup Complete */}
+        {method === 'phone' && tempToken && (
+          <form onSubmit={handlePhoneSignupComplete} className="space-y-4">
+            <div className="text-center mb-4">
+              <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground">Phone verified! Enter your name to complete signup.</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-2">Full Name</label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="John Doe"
+                className="w-full bg-secondary/50 border border-border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                required
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white py-3 rounded-xl font-medium transition-colors disabled:opacity-50"
+            >
+              {loading ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : 'Complete Signup'}
+            </button>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ============== LANDING PAGE ==============
 function LandingPage() {
   const { theme, toggleTheme } = useTheme();
