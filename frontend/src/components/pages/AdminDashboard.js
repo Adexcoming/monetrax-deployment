@@ -83,6 +83,7 @@ export default function AdminDashboard({ auth, api }) {
   );
 
   return (
+    <AdminContext.Provider value={{ user }}>
     <div className="min-h-screen flex bg-background">
       {/* Sidebar */}
       <aside className={`fixed lg:static inset-y-0 left-0 z-50 w-64 bg-card border-r border-border transform transition-transform lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
