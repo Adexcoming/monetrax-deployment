@@ -1279,6 +1279,7 @@ function DashboardLayout({ children }) {
 // ============== DASHBOARD PAGE ==============
 function DashboardPage() {
   const { user, business, updateBusiness } = useAuth();
+  const { subscription, usage, tier, tierName } = useSubscription();
   const [summary, setSummary] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1307,6 +1308,29 @@ function DashboardPage() {
       setLoading(false);
     }
   };
+
+  // Format renewal date
+  const formatRenewalDate = (dateStr) => {
+    if (!dateStr) return null;
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-NG', { 
+      day: 'numeric', 
+      month: 'short', 
+      year: 'numeric' 
+    });
+  };
+
+  // Get tier color
+  const getTierColor = (tierValue) => {
+    switch (tierValue) {
+      case 'enterprise': return 'purple';
+      case 'business': return 'emerald';
+      case 'starter': return 'blue';
+      default: return 'gray';
+    }
+  };
+
+  const tierColor = getTierColor(tier);
 
   if (loading) {
     return (
@@ -1347,6 +1371,132 @@ function DashboardPage() {
           </div>
         </div>
       )}
+
+      {/* Subscription Status Card */}
+      <div className={`glass rounded-2xl p-6 border-2 ${
+        tier === 'free' ? 'border-gray-500/30' : 
+        tier === 'starter' ? 'border-blue-500/30' : 
+        tier === 'business' ? 'border-emerald-500/30' : 
+        'border-purple-500/30'
+      }`} data-testid="subscription-status-card">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+              tier === 'free' ? 'bg-gray-500/10' : 
+              tier === 'starter' ? 'bg-blue-500/10' : 
+              tier === 'business' ? 'bg-emerald-500/10' : 
+              'bg-purple-500/10'
+            }`}>
+              <Crown className={`w-6 h-6 ${
+                tier === 'free' ? 'text-gray-500' : 
+                tier === 'starter' ? 'text-blue-500' : 
+                tier === 'business' ? 'text-emerald-500' : 
+                'text-purple-500'
+              }`} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="font-semibold text-lg">{tierName} Plan</h2>
+                <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+                  tier === 'free' ? 'bg-gray-500/10 text-gray-500' : 
+                  tier === 'starter' ? 'bg-blue-500/10 text-blue-500' : 
+                  tier === 'business' ? 'bg-emerald-500/10 text-emerald-500' : 
+                  'bg-purple-500/10 text-purple-500'
+                }`}>
+                  {subscription?.status === 'active' ? 'Active' : subscription?.status || 'Active'}
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground mt-1">
+                {subscription?.billing_cycle && (
+                  <span className="capitalize">{subscription.billing_cycle} billing</span>
+                )}
+                {subscription?.renewal_date && (
+                  <span className="flex items-center gap-1">
+                    <Clock className="w-3.5 h-3.5" />
+                    {subscription?.days_remaining !== null && subscription?.days_remaining >= 0 ? (
+                      subscription.days_remaining === 0 ? 'Renews today' :
+                      subscription.days_remaining === 1 ? 'Renews tomorrow' :
+                      `Renews in ${subscription.days_remaining} days`
+                    ) : (
+                      `Renews ${formatRenewalDate(subscription.renewal_date)}`
+                    )}
+                  </span>
+                )}
+                {tier === 'free' && (
+                  <span>No expiry</span>
+                )}
+              </div>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-3">
+            {/* Usage indicator */}
+            {usage && (
+              <div className="text-right hidden sm:block">
+                <p className="text-xs text-muted-foreground">Transactions this month</p>
+                <p className="font-semibold">
+                  {usage.transactions?.used || subscription?.usage?.transactions_this_month || 0}
+                  <span className="text-muted-foreground font-normal">
+                    /{usage.transactions?.unlimited ? '∞' : (usage.transactions?.limit || subscription?.usage?.transactions_limit || 50)}
+                  </span>
+                </p>
+              </div>
+            )}
+            
+            {subscription?.can_upgrade && (
+              <Link 
+                to="/subscription" 
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  tier === 'free' 
+                    ? 'bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white' 
+                    : 'bg-secondary hover:bg-secondary/80'
+                }`}
+                data-testid="upgrade-plan-btn"
+              >
+                {tier === 'free' ? 'Upgrade' : 'Manage Plan'}
+              </Link>
+            )}
+          </div>
+        </div>
+        
+        {/* Expiring soon warning */}
+        {subscription?.is_expiring_soon && (
+          <div className="mt-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0" />
+            <p className="text-sm text-amber-500">
+              Your subscription renews in {subscription.days_remaining} day{subscription.days_remaining !== 1 ? 's' : ''}. 
+              Make sure your payment method is up to date.
+            </p>
+          </div>
+        )}
+        
+        {/* Usage bar for mobile */}
+        {usage && (
+          <div className="mt-4 sm:hidden">
+            <div className="flex justify-between text-xs text-muted-foreground mb-1">
+              <span>Transactions used</span>
+              <span>
+                {usage.transactions?.used || subscription?.usage?.transactions_this_month || 0}
+                /{usage.transactions?.unlimited ? '∞' : (usage.transactions?.limit || subscription?.usage?.transactions_limit || 50)}
+              </span>
+            </div>
+            <div className="h-2 bg-secondary rounded-full overflow-hidden">
+              <div 
+                className={`h-full transition-all duration-500 ${
+                  tier === 'free' ? 'bg-gray-500' : 
+                  tier === 'starter' ? 'bg-blue-500' : 
+                  tier === 'business' ? 'bg-emerald-500' : 
+                  'bg-purple-500'
+                }`}
+                style={{ 
+                  width: usage.transactions?.unlimited ? '10%' : 
+                    `${Math.min(100, ((usage.transactions?.used || subscription?.usage?.transactions_this_month || 0) / (usage.transactions?.limit || subscription?.usage?.transactions_limit || 50)) * 100)}%` 
+                }}
+              />
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Tax Readiness Score */}
       <div className="glass rounded-2xl p-6 border-2 border-emerald-500/30">
