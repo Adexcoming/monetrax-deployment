@@ -3139,7 +3139,8 @@ function ProtectedRoute({ children }) {
 
 // ============== ADMIN PROTECTED ROUTE ==============
 function AdminProtectedRoute({ children }) {
-  const { user, loading, mfaRequired } = useAuth();
+  const auth = useAuth();
+  const { user, loading, mfaRequired } = auth;
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -3165,7 +3166,8 @@ function AdminProtectedRoute({ children }) {
   if (mfaRequired) return null;
   if (!['admin', 'superadmin'].includes(user.role)) return null;
 
-  return children;
+  // Pass auth context and api function to children
+  return React.cloneElement(children, { auth, api });
 }
 
 // ============== APP ROUTER ==============
