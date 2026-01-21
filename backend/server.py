@@ -336,13 +336,17 @@ async def create_session(request: Request, response: Response):
             {"user_id": user_id},
             {"$set": {"name": name, "picture": picture, "updated_at": datetime.now(timezone.utc)}}
         )
+        role = existing_user.get("role", "user")
     else:
         user_id = generate_id("user")
+        role = "user"  # Default role for new users
         await users_collection.insert_one({
             "user_id": user_id,
             "email": email,
             "name": name,
             "picture": picture,
+            "role": role,
+            "status": "active",
             "created_at": datetime.now(timezone.utc)
         })
     
