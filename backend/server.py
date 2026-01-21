@@ -3046,6 +3046,96 @@ async def admin_activate_user(user_id: str, admin: dict = Depends(require_admin)
     return {"status": "success", "message": "User activated"}
 
 
+@app.delete("/api/admin/users/{user_id}")
+async def admin_delete_user(user_id: str, admin: dict = Depends(require_superadmin)):
+    """Delete a user account permanently (superadmin only)"""
+    user = await users_collection.find_one({"user_id": user_id}, {"_id": 0})
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Prevent deleting yourself
+    if user_id == admin["user_id"]:
+        raise HTTPException(status_code=400, detail="Cannot delete your own account")
+    
+    # Prevent deleting other superadmins
+    if user.get("role") == "superadmin":
+        raise HTTPException(status_code=403, detail="Cannot delete superadmin accounts")
+    
+    # Delete user's business
+    business = await businesses_collection.find_one({"user_id": user_id}, {"_id": 0})
+    if business:
+        # Delete all transactions for this business
+        await transactions_collection.delete_many({"business_id": business["business_id"]})
+        await businesses_collection.delete_one({"user_id": user_id})
+    
+    # Delete user sessions
+    await sessions_collection.delete_many({"user_id": user_id})
+    
+    # Delete MFA data
+    await mfa_collection.delete_one({"user_id": user_id})
+    await backup_codes_collection.delete_one({"user_id": user_id})
+    
+    # Delete subscription data
+    await subscriptions_collection.delete_one({"user_id": user_id})
+    
+    # Delete the user
+    await users_collection.delete_one({"user_id": user_id})
+    
+    await log_admin_action(admin["user_id"], "user_delete", "user", user_id, {"email": user.get("email")})
+    
+    return {"status": "success", "message": f"User {user.get('email')} deleted permanently"}
+
+
+@app.post("/api/admin/users/{user_id}/change-tier")
+async def admin_change_user_tier(user_id: str, tier: str, admin: dict = Depends(require_superadmin)):
+    """Change a user's subscription tier (superadmin only)"""
+    valid_tiers = ["free", "starter", "business", "enterprise"]
+    
+    if tier not in valid_tiers:
+        raise HTTPException(status_code=400, detail=f"Invalid tier. Must be one of: {', '.join(valid_tiers)}")
+    
+    user = await users_collection.find_one({"user_id": user_id}, {"_id": 0})
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Update or create subscription
+    subscription = await subscriptions_collection.find_one({"user_id": user_id}, {"_id": 0})
+    
+    now = datetime.now(timezone.utc)
+    
+    if subscription:
+        old_tier = subscription.get("tier", "free")
+        await subscriptions_collection.update_one(
+            {"user_id": user_id},
+            {"$set": {
+                "tier": tier,
+                "updated_at": now.isoformat(),
+                "admin_override": True,
+                "admin_override_by": admin["user_id"],
+                "admin_override_at": now.isoformat()
+            }}
+        )
+    else:
+        old_tier = "free"
+        await subscriptions_collection.insert_one({
+            "subscription_id": f"sub_{uuid.uuid4().hex[:12]}",
+            "user_id": user_id,
+            "tier": tier,
+            "status": "active",
+            "billing_cycle": "admin_override",
+            "admin_override": True,
+            "admin_override_by": admin["user_id"],
+            "admin_override_at": now.isoformat(),
+            "created_at": now.isoformat()
+        })
+    
+    await log_admin_action(admin["user_id"], "tier_change", "user", user_id, {"old_tier": old_tier, "new_tier": tier})
+    
+    return {"status": "success", "message": f"User tier changed from {old_tier} to {tier}"}
+
+
 # ============== ADMIN BUSINESSES ==============
 
 @app.get("/api/admin/businesses")
