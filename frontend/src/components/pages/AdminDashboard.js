@@ -67,11 +67,16 @@ export default function AdminDashboard({ auth, api }) {
       navigate('/dashboard');
     }
   }, [user, navigate]);
-      navigate('/dashboard');
-    }
-  }, [user, navigate]);
 
-  if (!user || !['admin', 'superadmin'].includes(user.role)) {
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="w-12 h-12 border-4 border-red-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!['admin', 'superadmin'].includes(user.role)) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">
