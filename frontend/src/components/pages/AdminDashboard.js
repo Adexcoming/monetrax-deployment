@@ -851,7 +851,7 @@ function AdminTaxEngine() {
               {rules?.income_tax_brackets?.map((bracket, i) => (
                 <tr key={i} className="border-t border-border">
                   <td className="p-3">Bracket {i + 1}</td>
-                  <td className="p-3 text-right">{bracket.amount === Infinity ? 'Above' : formatCurrency(bracket.amount)}</td>
+                  <td className="p-3 text-right">{bracket.amount === Infinity || bracket.amount === 'unlimited' ? 'Above' : formatCurrency(bracket.amount)}</td>
                   <td className="p-3 text-right">{(bracket.rate * 100).toFixed(0)}%</td>
                 </tr>
               ))}
