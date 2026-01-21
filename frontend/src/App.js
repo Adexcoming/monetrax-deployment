@@ -622,7 +622,12 @@ function AuthCallback() {
           navigate('/mfa-verify', { state: { user: userData } });
         } else {
           toast.success(`Welcome, ${userData.name}!`);
-          navigate('/dashboard', { state: { user: userData } });
+          // Redirect admin/superadmin users to admin panel, others to dashboard
+          if (['admin', 'superadmin'].includes(userData.role)) {
+            navigate('/admin', { state: { user: userData } });
+          } else {
+            navigate('/dashboard', { state: { user: userData } });
+          }
         }
       } catch (error) {
         toast.error(error.message);
