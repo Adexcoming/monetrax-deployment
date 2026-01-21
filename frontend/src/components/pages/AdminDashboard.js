@@ -39,15 +39,34 @@ const useAuth = () => {
 export default function AdminDashboard({ auth, api }) {
   // Use passed props or fallback to local apiCall
   const apiFunc = api || apiCall;
-  const user = auth?.user;
+  const [user, setUser] = useState(auth?.user || null);
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Fetch current user if not provided via props
+  useEffect(() => {
+    if (!user) {
+      const fetchUser = async () => {
+        try {
+          const userData = await apiCall('/api/auth/me');
+          setUser(userData);
+        } catch (error) {
+          console.error('Failed to fetch user:', error);
+          navigate('/');
+        }
+      };
+      fetchUser();
+    }
+  }, [user, navigate]);
 
   // Check admin access
   useEffect(() => {
     if (user && !['admin', 'superadmin'].includes(user.role)) {
       toast.error('Admin access required');
+      navigate('/dashboard');
+    }
+  }, [user, navigate]);
       navigate('/dashboard');
     }
   }, [user, navigate]);
