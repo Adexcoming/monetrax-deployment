@@ -669,7 +669,12 @@ function MFAVerifyPage() {
       const result = await api(endpoint, { method: 'POST', body: JSON.stringify({ code }) });
       completeMfa(result.user);
       toast.success('Authentication successful!');
-      navigate('/dashboard', { state: { user: result.user } });
+      // Redirect admin/superadmin users to admin panel, others to dashboard
+      if (['admin', 'superadmin'].includes(result.user?.role)) {
+        navigate('/admin', { state: { user: result.user } });
+      } else {
+        navigate('/dashboard', { state: { user: result.user } });
+      }
     } catch (error) {
       toast.error(error.message);
     } finally {
