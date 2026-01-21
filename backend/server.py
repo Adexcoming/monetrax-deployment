@@ -379,6 +379,7 @@ async def create_session(request: Request, response: Response):
         "email": email,
         "name": name,
         "picture": picture,
+        "role": role,
         "mfa_enabled": mfa_enabled,
         "mfa_verified": not mfa_enabled,
         "session_token": session_token
