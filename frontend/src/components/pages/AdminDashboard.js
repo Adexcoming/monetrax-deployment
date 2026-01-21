@@ -166,6 +166,7 @@ export default function AdminDashboard({ auth, api }) {
         </Routes>
       </main>
     </div>
+    </AdminContext.Provider>
   );
 }
 
