@@ -2291,6 +2291,8 @@ async def get_current_subscription(user: dict = Depends(get_current_user)):
         })
         usage["transactions_this_month"] = monthly_tx_count
     
+    now = datetime.now(timezone.utc)
+    
     if not subscription:
         # Check if user ever had a paid subscription (prevent free tier re-trial)
         had_paid_subscription = await payment_transactions_collection.find_one(
@@ -2298,7 +2300,6 @@ async def get_current_subscription(user: dict = Depends(get_current_user)):
             {"_id": 0}
         )
         
-        now = datetime.now(timezone.utc)
         tier_data = SUBSCRIPTION_TIERS["free"]
         usage["transactions_limit"] = tier_data["features"]["transactions_per_month"]
         
@@ -2312,6 +2313,9 @@ async def get_current_subscription(user: dict = Depends(get_current_user)):
             "features": tier_data["features"],
             "current_period_start": now.isoformat(),
             "current_period_end": None,
+            "renewal_date": None,
+            "days_remaining": None,
+            "is_expiring_soon": False,
             "can_upgrade": True,
             "had_paid_subscription": bool(had_paid_subscription),
             "usage": usage
@@ -2320,10 +2324,32 @@ async def get_current_subscription(user: dict = Depends(get_current_user)):
     tier_data = SUBSCRIPTION_TIERS.get(subscription["tier"], SUBSCRIPTION_TIERS["free"])
     usage["transactions_limit"] = tier_data["features"]["transactions_per_month"]
     
+    # Calculate renewal/expiry info
+    current_period_end = subscription.get("current_period_end")
+    renewal_date = None
+    days_remaining = None
+    is_expiring_soon = False
+    
+    if current_period_end:
+        if isinstance(current_period_end, str):
+            period_end = datetime.fromisoformat(current_period_end.replace('Z', '+00:00'))
+        else:
+            period_end = current_period_end
+        
+        if period_end.tzinfo is None:
+            period_end = period_end.replace(tzinfo=timezone.utc)
+        
+        renewal_date = period_end.isoformat()
+        days_remaining = (period_end - now).days
+        is_expiring_soon = days_remaining <= 7 and days_remaining >= 0
+    
     return {
         **subscription,
         "tier_name": tier_data["name"],
         "features": tier_data["features"],
+        "renewal_date": renewal_date,
+        "days_remaining": days_remaining,
+        "is_expiring_soon": is_expiring_soon,
         "can_upgrade": subscription["tier"] != "enterprise",
         "had_paid_subscription": True,
         "usage": usage
