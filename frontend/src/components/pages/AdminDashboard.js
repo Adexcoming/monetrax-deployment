@@ -171,7 +171,7 @@ function AdminOverview() {
 
   const fetchOverview = async () => {
     try {
-      const result = await api('/api/admin/overview');
+      const result = await apiCall('/api/admin/overview');
       setData(result);
     } catch (error) {
       toast.error(error.message);
@@ -295,7 +295,7 @@ function AdminUsers() {
       if (roleFilter) url += `&role=${roleFilter}`;
       if (statusFilter) url += `&status=${statusFilter}`;
       
-      const result = await api(url);
+      const result = await apiCall(url);
       setUsers(result.users);
       setPagination(result.pagination);
     } catch (error) {
@@ -308,7 +308,7 @@ function AdminUsers() {
   const handleSuspend = async (userId) => {
     if (!window.confirm('Are you sure you want to suspend this user?')) return;
     try {
-      await api(`/api/admin/users/${userId}/suspend`, { method: 'POST' });
+      await apiCall(`/api/admin/users/${userId}/suspend`, { method: 'POST' });
       toast.success('User suspended');
       fetchUsers();
     } catch (error) {
@@ -318,7 +318,7 @@ function AdminUsers() {
 
   const handleActivate = async (userId) => {
     try {
-      await api(`/api/admin/users/${userId}/activate`, { method: 'POST' });
+      await apiCall(`/api/admin/users/${userId}/activate`, { method: 'POST' });
       toast.success('User activated');
       fetchUsers();
     } catch (error) {
@@ -479,7 +479,7 @@ function AdminBusinesses() {
       let url = `/api/admin/businesses?page=${pagination.page}&limit=20`;
       if (search) url += `&search=${encodeURIComponent(search)}`;
       
-      const result = await api(url);
+      const result = await apiCall(url);
       setBusinesses(result.businesses);
       setPagination(result.pagination);
     } catch (error) {
@@ -585,7 +585,7 @@ function AdminTransactions() {
       if (typeFilter) url += `&type=${typeFilter}`;
       if (flaggedOnly) url += `&flagged=true`;
       
-      const result = await api(url);
+      const result = await apiCall(url);
       setTransactions(result.transactions);
       setTotals(result.totals);
       setPagination(result.pagination);
@@ -601,7 +601,7 @@ function AdminTransactions() {
     if (reason === null) return;
     
     try {
-      await api(`/api/admin/transactions/${txId}/flag?reason=${encodeURIComponent(reason)}`, { method: 'POST' });
+      await apiCall(`/api/admin/transactions/${txId}/flag?reason=${encodeURIComponent(reason)}`, { method: 'POST' });
       toast.success('Transaction flagged');
       fetchTransactions();
     } catch (error) {
@@ -611,7 +611,7 @@ function AdminTransactions() {
 
   const handleUnflag = async (txId) => {
     try {
-      await api(`/api/admin/transactions/${txId}/unflag`, { method: 'POST' });
+      await apiCall(`/api/admin/transactions/${txId}/unflag`, { method: 'POST' });
       toast.success('Flag removed');
       fetchTransactions();
     } catch (error) {
@@ -729,7 +729,7 @@ function AdminTaxEngine() {
 
   const fetchRules = async () => {
     try {
-      const result = await api('/api/admin/tax-rules');
+      const result = await apiCall('/api/admin/tax-rules');
       setRules(result);
       setFormData({
         vat_rate: result.vat_rate,
@@ -744,7 +744,7 @@ function AdminTaxEngine() {
 
   const handleSave = async () => {
     try {
-      await api('/api/admin/tax-rules', {
+      await apiCall('/api/admin/tax-rules', {
         method: 'PUT',
         body: JSON.stringify(formData)
       });
@@ -870,7 +870,7 @@ function AdminSubscriptions() {
       let url = `/api/admin/subscriptions?page=${pagination.page}&limit=20`;
       if (tierFilter) url += `&tier=${tierFilter}`;
       
-      const result = await api(url);
+      const result = await apiCall(url);
       setSubscriptions(result.subscriptions);
       setPagination(result.pagination);
     } catch (error) {
@@ -969,7 +969,7 @@ function AdminLogs() {
       let url = `/api/admin/logs?page=${pagination.page}&limit=50`;
       if (actionFilter) url += `&action=${actionFilter}`;
       
-      const result = await api(url);
+      const result = await apiCall(url);
       setLogs(result.logs);
       setPagination(result.pagination);
     } catch (error) {
@@ -1050,7 +1050,7 @@ function AdminSettings() {
 
   const fetchSettings = async () => {
     try {
-      const result = await api('/api/admin/settings');
+      const result = await apiCall('/api/admin/settings');
       setSettings(result);
     } catch (error) {
       toast.error(error.message);
@@ -1062,7 +1062,7 @@ function AdminSettings() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await api('/api/admin/settings', {
+      await apiCall('/api/admin/settings', {
         method: 'PUT',
         body: JSON.stringify(settings)
       });
