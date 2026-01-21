@@ -507,7 +507,7 @@ function AdminUsers() {
                             className="p-2 hover:bg-red-500/10 text-red-500 rounded-lg"
                             title="Delete Account"
                           >
-                            <X className="w-4 h-4" />
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         )}
                       </div>
