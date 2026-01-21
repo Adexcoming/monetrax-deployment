@@ -452,6 +452,350 @@ async def logout(request: Request, response: Response):
     return {"message": "Logged out successfully"}
 
 
+# ============== EMAIL/PASSWORD AUTH ==============
+
+def hash_password(password: str) -> str:
+    """Hash a password using bcrypt"""
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+
+def verify_password(password: str, hashed: str) -> bool:
+    """Verify a password against a hash"""
+    return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
+
+
+@app.post("/api/auth/email/signup")
+async def email_signup(data: EmailSignupRequest, response: Response):
+    """Register a new user with email and password"""
+    # Check if email already exists
+    existing_user = await users_collection.find_one({"email": data.email.lower()}, {"_id": 0})
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Email already registered. Please login instead.")
+    
+    # Create user
+    user_id = f"user_{uuid.uuid4().hex[:12]}"
+    hashed_password = hash_password(data.password)
+    
+    await users_collection.insert_one({
+        "user_id": user_id,
+        "email": data.email.lower(),
+        "name": data.name,
+        "password_hash": hashed_password,
+        "auth_provider": "email",
+        "role": "user",
+        "status": "active",
+        "email_verified": False,
+        "created_at": datetime.now(timezone.utc)
+    })
+    
+    # Create session
+    session_token = generate_session_token()
+    expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+    
+    await sessions_collection.insert_one({
+        "user_id": user_id,
+        "session_token": session_token,
+        "expires_at": expires_at,
+        "mfa_verified": True,
+        "created_at": datetime.now(timezone.utc)
+    })
+    
+    response.set_cookie(
+        key="session_token",
+        value=session_token,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        path="/",
+        max_age=7 * 24 * 60 * 60
+    )
+    
+    return {
+        "user_id": user_id,
+        "email": data.email.lower(),
+        "name": data.name,
+        "role": "user",
+        "mfa_enabled": False,
+        "mfa_verified": True,
+        "session_token": session_token
+    }
+
+
+@app.post("/api/auth/email/login")
+async def email_login(data: EmailLoginRequest, response: Response):
+    """Login with email and password"""
+    user = await users_collection.find_one({"email": data.email.lower()}, {"_id": 0})
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    
+    # Check if user registered with a different auth provider
+    auth_provider = user.get("auth_provider", "google")
+    if auth_provider != "email" and not user.get("password_hash"):
+        raise HTTPException(
+            status_code=400, 
+            detail=f"This account uses {auth_provider} login. Please use '{auth_provider.title()}' to sign in."
+        )
+    
+    if not user.get("password_hash"):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    
+    if not verify_password(data.password, user["password_hash"]):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    
+    if user.get("status") == "suspended":
+        raise HTTPException(status_code=403, detail="Your account has been suspended")
+    
+    # Create session
+    session_token = generate_session_token()
+    expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+    
+    mfa_doc = await mfa_collection.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    mfa_enabled = mfa_doc.get("totp_enabled", False) if mfa_doc else False
+    
+    await sessions_collection.insert_one({
+        "user_id": user["user_id"],
+        "session_token": session_token,
+        "expires_at": expires_at,
+        "mfa_verified": not mfa_enabled,
+        "created_at": datetime.now(timezone.utc)
+    })
+    
+    response.set_cookie(
+        key="session_token",
+        value=session_token,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        path="/",
+        max_age=7 * 24 * 60 * 60
+    )
+    
+    return {
+        "user_id": user["user_id"],
+        "email": user["email"],
+        "name": user["name"],
+        "picture": user.get("picture"),
+        "role": user.get("role", "user"),
+        "mfa_enabled": mfa_enabled,
+        "mfa_verified": not mfa_enabled,
+        "session_token": session_token
+    }
+
+
+# ============== PHONE AUTH ==============
+
+# In-memory OTP storage (in production, use Redis or database)
+phone_otp_store = {}
+
+
+def generate_otp():
+    """Generate a 6-digit OTP"""
+    return ''.join([str(random.randint(0, 9)) for _ in range(6)])
+
+
+@app.post("/api/auth/phone/send-otp")
+async def phone_send_otp(data: PhoneSendOTPRequest):
+    """Send OTP to phone number for verification"""
+    phone = data.phone.replace(" ", "").replace("-", "")
+    
+    # Normalize Nigerian phone numbers
+    if phone.startswith("0"):
+        phone = "+234" + phone[1:]
+    elif not phone.startswith("+"):
+        phone = "+234" + phone
+    
+    # Generate OTP
+    otp = generate_otp()
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
+    
+    # Store OTP (in production, send via SMS using Twilio/Termii)
+    phone_otp_store[phone] = {
+        "otp": otp,
+        "expires_at": expires_at,
+        "attempts": 0
+    }
+    
+    # NOTE: In production, integrate with SMS provider like Twilio or Termii
+    # For now, we'll log the OTP (remove in production!)
+    logger.info(f"OTP for {phone}: {otp} (Development only - remove in production)")
+    
+    # Check if user exists for this phone
+    existing_user = await users_collection.find_one({"phone": phone}, {"_id": 0})
+    
+    return {
+        "message": "OTP sent successfully",
+        "phone": phone,
+        "is_new_user": existing_user is None,
+        # Remove this in production - only for testing!
+        "dev_otp": otp
+    }
+
+
+@app.post("/api/auth/phone/verify")
+async def phone_verify_otp(data: PhoneVerifyRequest, response: Response):
+    """Verify OTP and login/signup user"""
+    phone = data.phone.replace(" ", "").replace("-", "")
+    
+    # Normalize Nigerian phone numbers
+    if phone.startswith("0"):
+        phone = "+234" + phone[1:]
+    elif not phone.startswith("+"):
+        phone = "+234" + phone
+    
+    # Check OTP
+    stored = phone_otp_store.get(phone)
+    if not stored:
+        raise HTTPException(status_code=400, detail="No OTP found for this number. Please request a new one.")
+    
+    if stored["attempts"] >= 3:
+        del phone_otp_store[phone]
+        raise HTTPException(status_code=400, detail="Too many attempts. Please request a new OTP.")
+    
+    if datetime.now(timezone.utc) > stored["expires_at"]:
+        del phone_otp_store[phone]
+        raise HTTPException(status_code=400, detail="OTP expired. Please request a new one.")
+    
+    if stored["otp"] != data.code:
+        stored["attempts"] += 1
+        raise HTTPException(status_code=400, detail="Invalid OTP")
+    
+    # OTP is valid - remove it
+    del phone_otp_store[phone]
+    
+    # Check if user exists
+    user = await users_collection.find_one({"phone": phone}, {"_id": 0})
+    
+    if not user:
+        # This is a new user - they need to provide their name
+        # Return a token for completing registration
+        temp_token = secrets.token_urlsafe(32)
+        phone_otp_store[f"verified_{temp_token}"] = {
+            "phone": phone,
+            "expires_at": datetime.now(timezone.utc) + timedelta(minutes=30)
+        }
+        return {
+            "status": "needs_registration",
+            "temp_token": temp_token,
+            "message": "Phone verified. Please complete registration."
+        }
+    
+    # Existing user - create session
+    if user.get("status") == "suspended":
+        raise HTTPException(status_code=403, detail="Your account has been suspended")
+    
+    session_token = generate_session_token()
+    expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+    
+    mfa_doc = await mfa_collection.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    mfa_enabled = mfa_doc.get("totp_enabled", False) if mfa_doc else False
+    
+    await sessions_collection.insert_one({
+        "user_id": user["user_id"],
+        "session_token": session_token,
+        "expires_at": expires_at,
+        "mfa_verified": not mfa_enabled,
+        "created_at": datetime.now(timezone.utc)
+    })
+    
+    response.set_cookie(
+        key="session_token",
+        value=session_token,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        path="/",
+        max_age=7 * 24 * 60 * 60
+    )
+    
+    return {
+        "status": "authenticated",
+        "user_id": user["user_id"],
+        "email": user.get("email", ""),
+        "phone": user["phone"],
+        "name": user["name"],
+        "picture": user.get("picture"),
+        "role": user.get("role", "user"),
+        "mfa_enabled": mfa_enabled,
+        "mfa_verified": not mfa_enabled,
+        "session_token": session_token
+    }
+
+
+@app.post("/api/auth/phone/complete-signup")
+async def phone_complete_signup(request: Request, response: Response):
+    """Complete phone signup with user details"""
+    data = await request.json()
+    temp_token = data.get("temp_token")
+    name = data.get("name", "").strip()
+    
+    if not temp_token or not name:
+        raise HTTPException(status_code=400, detail="Missing required fields")
+    
+    # Verify temp token
+    stored = phone_otp_store.get(f"verified_{temp_token}")
+    if not stored:
+        raise HTTPException(status_code=400, detail="Invalid or expired token. Please start again.")
+    
+    if datetime.now(timezone.utc) > stored["expires_at"]:
+        del phone_otp_store[f"verified_{temp_token}"]
+        raise HTTPException(status_code=400, detail="Token expired. Please start again.")
+    
+    phone = stored["phone"]
+    del phone_otp_store[f"verified_{temp_token}"]
+    
+    # Check if user already exists
+    existing = await users_collection.find_one({"phone": phone}, {"_id": 0})
+    if existing:
+        raise HTTPException(status_code=400, detail="User already exists")
+    
+    # Create user
+    user_id = f"user_{uuid.uuid4().hex[:12]}"
+    
+    await users_collection.insert_one({
+        "user_id": user_id,
+        "phone": phone,
+        "name": name,
+        "auth_provider": "phone",
+        "role": "user",
+        "status": "active",
+        "phone_verified": True,
+        "created_at": datetime.now(timezone.utc)
+    })
+    
+    # Create session
+    session_token = generate_session_token()
+    expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+    
+    await sessions_collection.insert_one({
+        "user_id": user_id,
+        "session_token": session_token,
+        "expires_at": expires_at,
+        "mfa_verified": True,
+        "created_at": datetime.now(timezone.utc)
+    })
+    
+    response.set_cookie(
+        key="session_token",
+        value=session_token,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        path="/",
+        max_age=7 * 24 * 60 * 60
+    )
+    
+    return {
+        "user_id": user_id,
+        "phone": phone,
+        "name": name,
+        "role": "user",
+        "mfa_enabled": False,
+        "mfa_verified": True,
+        "session_token": session_token
+    }
+
+
 # ============== MFA ROUTES ==============
 
 @app.post("/api/mfa/totp/setup", response_model=TOTPSetupResponse)
