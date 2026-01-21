@@ -765,13 +765,18 @@ function DashboardLayout({ children }) {
               key={item.path}
               to={item.path}
               className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-                location.pathname === item.path
-                  ? 'bg-emerald-500/10 text-emerald-500 font-medium'
-                  : 'text-muted-foreground hover:bg-secondary/50 hover:text-foreground'
+                location.pathname === item.path || (item.path === '/admin' && location.pathname.startsWith('/admin'))
+                  ? item.isAdmin 
+                    ? 'bg-red-500/10 text-red-500 font-medium'
+                    : 'bg-emerald-500/10 text-emerald-500 font-medium'
+                  : item.isAdmin
+                    ? 'text-red-400 hover:bg-red-500/10 hover:text-red-500'
+                    : 'text-muted-foreground hover:bg-secondary/50 hover:text-foreground'
               }`}
             >
               <item.icon className="w-5 h-5" />
               {item.label}
+              {item.isAdmin && <span className="text-xs bg-red-500/20 px-2 py-0.5 rounded-full">Admin</span>}
             </Link>
           ))}
         </nav>
@@ -782,6 +787,9 @@ function DashboardLayout({ children }) {
             <div className="flex-1 min-w-0">
               <p className="font-medium text-sm truncate">{user?.name}</p>
               <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
+              {isAdmin && (
+                <p className="text-xs text-red-500 capitalize">{user?.role}</p>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2">
