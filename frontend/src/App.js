@@ -3136,6 +3136,37 @@ function ProtectedRoute({ children }) {
   return <DashboardLayout>{children}</DashboardLayout>;
 }
 
+// ============== ADMIN PROTECTED ROUTE ==============
+function AdminProtectedRoute({ children }) {
+  const { user, loading, mfaRequired } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!loading && !user) {
+      navigate('/');
+    } else if (!loading && mfaRequired) {
+      navigate('/mfa-verify');
+    } else if (!loading && user && !['admin', 'superadmin'].includes(user.role)) {
+      toast.error('Access denied. Admin privileges required.');
+      navigate('/dashboard');
+    }
+  }, [user, loading, mfaRequired, navigate]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="w-12 h-12 border-4 border-red-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!user) return null;
+  if (mfaRequired) return null;
+  if (!['admin', 'superadmin'].includes(user.role)) return null;
+
+  return children;
+}
+
 // ============== APP ROUTER ==============
 function AppRouter() {
   const location = useLocation();
