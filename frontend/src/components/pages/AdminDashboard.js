@@ -522,6 +522,55 @@ function AdminUsers() {
 
       {/* Pagination */}
       <Pagination pagination={pagination} setPagination={setPagination} />
+
+      {/* Change Tier Modal */}
+      {showTierModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="glass rounded-2xl p-6 max-w-md w-full animate-fade-in">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">Change Subscription Tier</h3>
+              <button onClick={() => setShowTierModal(null)} className="p-2 hover:bg-secondary rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="mb-4">
+              <p className="text-sm text-muted-foreground mb-2">
+                Changing tier for: <span className="font-medium text-foreground">{showTierModal.email}</span>
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Current tier: <span className="font-medium text-foreground capitalize">{showTierModal.subscription_tier || 'free'}</span>
+              </p>
+            </div>
+            <div className="mb-6">
+              <label className="text-sm font-medium mb-2 block">New Tier</label>
+              <select
+                value={selectedTier}
+                onChange={(e) => setSelectedTier(e.target.value)}
+                className="w-full bg-secondary/50 border border-border rounded-xl px-4 py-3"
+              >
+                <option value="free">Free</option>
+                <option value="starter">Starter (₦5,000/mo)</option>
+                <option value="business">Business (₦10,000/mo)</option>
+                <option value="enterprise">Enterprise (₦20,000/mo)</option>
+              </select>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={handleChangeTier}
+                className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-medium py-3 rounded-xl transition-colors"
+              >
+                Change Tier
+              </button>
+              <button
+                onClick={() => setShowTierModal(null)}
+                className="flex-1 bg-secondary hover:bg-secondary/80 py-3 rounded-xl transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
