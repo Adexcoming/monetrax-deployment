@@ -285,12 +285,15 @@ function AdminOverview() {
 
 // ============== USERS ==============
 function AdminUsers() {
+  const { user: currentUser } = useAuth();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 });
+  const [showTierModal, setShowTierModal] = useState(null);
+  const [selectedTier, setSelectedTier] = useState('free');
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -335,6 +338,33 @@ function AdminUsers() {
       toast.error(error.message);
     }
   };
+
+  const handleDelete = async (userId, userEmail) => {
+    if (!window.confirm(`Are you sure you want to PERMANENTLY DELETE the account for ${userEmail}? This action cannot be undone!`)) return;
+    if (!window.confirm(`FINAL WARNING: All data for ${userEmail} will be deleted including their business, transactions, and subscription. Continue?`)) return;
+    
+    try {
+      await apiCall(`/api/admin/users/${userId}`, { method: 'DELETE' });
+      toast.success(`User ${userEmail} deleted permanently`);
+      fetchUsers();
+    } catch (error) {
+      toast.error(error.message);
+    }
+  };
+
+  const handleChangeTier = async () => {
+    if (!showTierModal) return;
+    try {
+      await apiCall(`/api/admin/users/${showTierModal.user_id}/change-tier?tier=${selectedTier}`, { method: 'POST' });
+      toast.success(`Tier changed to ${selectedTier}`);
+      setShowTierModal(null);
+      fetchUsers();
+    } catch (error) {
+      toast.error(error.message);
+    }
+  };
+
+  const isSuperadmin = currentUser?.role === 'superadmin';
 
   return (
     <div className="p-4 lg:p-8 space-y-6">
@@ -423,10 +453,30 @@ function AdminUsers() {
                         {user.status || 'active'}
                       </span>
                     </td>
-                    <td className="p-4 capitalize">{user.subscription_tier || 'free'}</td>
+                    <td className="p-4">
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium capitalize ${
+                          user.subscription_tier === 'enterprise' ? 'bg-purple-500/10 text-purple-500' :
+                          user.subscription_tier === 'business' ? 'bg-emerald-500/10 text-emerald-500' :
+                          user.subscription_tier === 'starter' ? 'bg-blue-500/10 text-blue-500' :
+                          'bg-secondary text-muted-foreground'
+                        }`}>
+                          {user.subscription_tier || 'free'}
+                        </span>
+                        {isSuperadmin && user.role !== 'superadmin' && (
+                          <button
+                            onClick={() => { setShowTierModal(user); setSelectedTier(user.subscription_tier || 'free'); }}
+                            className="p-1 hover:bg-secondary rounded text-muted-foreground hover:text-foreground"
+                            title="Change Tier"
+                          >
+                            <Edit className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
                     <td className="p-4">{user.business_name || '-'}</td>
                     <td className="p-4 text-right">
-                      <div className="flex items-center justify-end gap-2">
+                      <div className="flex items-center justify-end gap-1">
                         <button
                           onClick={() => navigate(`/admin/users/${user.user_id}`)}
                           className="p-2 hover:bg-secondary rounded-lg"
@@ -449,6 +499,15 @@ function AdminUsers() {
                             title="Suspend"
                           >
                             <Ban className="w-4 h-4" />
+                          </button>
+                        )}
+                        {isSuperadmin && user.role !== 'superadmin' && (
+                          <button
+                            onClick={() => handleDelete(user.user_id, user.email)}
+                            className="p-2 hover:bg-red-500/10 text-red-500 rounded-lg"
+                            title="Delete Account"
+                          >
+                            <X className="w-4 h-4" />
                           </button>
                         )}
                       </div>
