@@ -10,6 +10,7 @@ import {
   Wifi, WifiOff, Share2
 } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart as RechartsPie, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import AdminDashboard from './components/pages/AdminDashboard';
 import './App.css';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
