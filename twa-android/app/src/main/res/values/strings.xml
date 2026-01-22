@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- App Information -->
+    <string name="app_name">Monetrax</string>
+    <string name="app_name_full">Monetrax - Financial OS</string>
+    
+    <!-- TWA Configuration -->
+    <!-- IMPORTANT: Update this to your production URL before publishing -->
+    <string name="host_name">monetrax-admin.preview.emergentagent.com</string>
+    <string name="default_url">https://monetrax-admin.preview.emergentagent.com</string>
+    
+    <!-- Provider Authority (must be unique) -->
+    <string name="provider_authority">com.monetrax.app.fileprovider</string>
+    
+    <!-- Fallback type: "customtabs" opens in Chrome Custom Tabs if TWA fails -->
+    <string name="fallbackType">customtabs</string>
+    
+    <!-- Screen orientation: "default", "portrait", or "landscape" -->
+    <string name="orientation">default</string>
+    
+    <!-- Digital Asset Links - UPDATE SHA256 FINGERPRINT -->
+    <!-- Generate fingerprint with: keytool -list -v -keystore your-keystore.jks -->
+    <string name="assetStatements">
+        [{
+            \"relation\": [\"delegate_permission/common.handle_all_urls\"],
+            \"target\": {
+                \"namespace\": \"android_app\",
+                \"package_name\": \"com.monetrax.app\",
+                \"sha256_cert_fingerprints\": [\"YOUR_SHA256_FINGERPRINT_HERE\"]
+            }
+        }]
+    </string>
+</resources>
