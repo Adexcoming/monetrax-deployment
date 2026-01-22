@@ -2789,36 +2789,83 @@ async def get_subscription_usage(user: dict = Depends(get_current_user)):
     
     tx_limit = tier_data["features"]["transactions_per_month"]
     
-    # Check if limit exceeded
-    limit_exceeded = tx_limit != -1 and transactions_this_month >= tx_limit
-    
-    # Calculate percentage used
-    usage_percentage = 0
-    if tx_limit > 0:
-        usage_percentage = min(100, round((transactions_this_month / tx_limit) * 100))
-    elif tx_limit == -1:
-        usage_percentage = 0  # Unlimited
-    
     # Check if user ever had paid subscription
     had_paid = await payment_transactions_collection.find_one(
         {"user_id": user["user_id"], "status": "completed"},
         {"_id": 0}
     )
     
+    # Determine the relevant transaction count based on tier
+    # Free tier: TOTAL transactions count
+    # Paid tiers: MONTHLY transactions count
+    if tier == "free":
+        relevant_count = total_transactions
+        count_type = "total"
+    else:
+        relevant_count = transactions_this_month
+        count_type = "monthly"
+    
+    # Check if limit exceeded
+    limit_exceeded = tx_limit != -1 and relevant_count >= tx_limit
+    
+    # Calculate percentage used
+    usage_percentage = 0
+    if tx_limit > 0:
+        usage_percentage = min(100, round((relevant_count / tx_limit) * 100))
+    elif tx_limit == -1:
+        usage_percentage = 0  # Unlimited
+    
+    # Check subscription expiry for paid tiers
+    subscription_expired = False
+    expires_at = None
+    if subscription and tier != "free":
+        current_period_end = subscription.get("current_period_end")
+        if current_period_end:
+            if isinstance(current_period_end, str):
+                period_end = datetime.fromisoformat(current_period_end.replace('Z', '+00:00'))
+            else:
+                period_end = current_period_end
+            
+            if period_end.tzinfo is None:
+                period_end = period_end.replace(tzinfo=timezone.utc)
+            
+            subscription_expired = period_end < now
+            expires_at = period_end.isoformat()
+    
+    # Can add transactions?
+    can_add_transactions = True
+    block_reason = None
+    
+    if subscription_expired:
+        can_add_transactions = False
+        block_reason = "subscription_expired"
+    elif tier == "free" and bool(had_paid):
+        can_add_transactions = False
+        block_reason = "free_trial_not_available"
+    elif limit_exceeded:
+        can_add_transactions = False
+        block_reason = "limit_exceeded"
+    
     return {
         "tier": tier,
         "tier_name": tier_data["name"],
         "transactions": {
-            "used": transactions_this_month,
+            "used": relevant_count,
             "limit": tx_limit,
             "unlimited": tx_limit == -1,
-            "remaining": max(0, tx_limit - transactions_this_month) if tx_limit != -1 else -1,
+            "remaining": max(0, tx_limit - relevant_count) if tx_limit != -1 else -1,
             "usage_percentage": usage_percentage,
-            "limit_exceeded": limit_exceeded
+            "limit_exceeded": limit_exceeded,
+            "count_type": count_type  # "total" for free, "monthly" for paid
         },
+        "transactions_this_month": transactions_this_month,
         "total_transactions": total_transactions,
         "features": tier_data["features"],
         "had_paid_subscription": bool(had_paid),
+        "subscription_expired": subscription_expired,
+        "expires_at": expires_at,
+        "can_add_transactions": can_add_transactions,
+        "block_reason": block_reason,
         "month_start": month_start,
         "can_upgrade": tier != "enterprise"
     }
