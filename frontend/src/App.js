@@ -1879,9 +1879,10 @@ function TransactionsPage() {
   };
 
   const handleAddTransaction = () => {
-    // Check if limit reached before showing modal
-    if (usage?.transactions?.limit_exceeded) {
-      promptUpgrade('transaction_limit');
+    // Check if user can add transactions
+    const check = checkTransactionLimit();
+    if (!check.canAdd) {
+      promptUpgrade(check.reason || 'transaction_limit');
       return;
     }
     setShowAddModal(true);
@@ -1890,24 +1891,25 @@ function TransactionsPage() {
   // Calculate usage percentage for progress bar
   const usagePercentage = usage?.transactions?.usage_percentage || 0;
   const isNearLimit = usagePercentage >= 80;
-  const isAtLimit = usage?.transactions?.limit_exceeded;
+  const isAtLimit = usage?.transactions?.limit_exceeded || !checkTransactionLimit().canAdd;
+  const isFreeUser = tier === 'free';
 
   return (
     <div className="p-4 lg:p-8 space-y-6" data-testid="transactions-page">
       {/* Usage Banner */}
-      {tier === 'free' && usage && (
+      {usage && (
         <div className={`glass rounded-xl p-4 ${isAtLimit ? 'border border-red-500/50 bg-red-500/5' : isNearLimit ? 'border border-yellow-500/50 bg-yellow-500/5' : ''}`} data-testid="usage-banner">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <Receipt className={`w-4 h-4 ${isAtLimit ? 'text-red-500' : isNearLimit ? 'text-yellow-500' : 'text-muted-foreground'}`} />
               <span className="text-sm font-medium">
-                {usage.transactions.used} / {usage.transactions.limit} transactions this month
+                {usage.transactions.used} / {usage.transactions.unlimited ? '∞' : usage.transactions.limit} transactions {isFreeUser ? '(total)' : 'this month'}
               </span>
             </div>
-            {(isNearLimit || isAtLimit) && (
+            {(isNearLimit || isAtLimit) && tier !== 'enterprise' && (
               <Link to="/subscription" className="text-xs text-emerald-500 hover:underline flex items-center gap-1">
                 <Crown className="w-3 h-3" />
-                Upgrade
+                {isAtLimit ? 'Upgrade Now' : 'Upgrade'}
               </Link>
             )}
           </div>
