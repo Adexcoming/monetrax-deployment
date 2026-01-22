@@ -331,14 +331,50 @@ function SubscriptionProvider({ children }) {
 
   const checkTransactionLimit = () => {
     if (!usage) return { canAdd: true };
+    
+    // Check if subscription expired
+    if (usage.subscription_expired) {
+      return {
+        canAdd: false,
+        reason: 'subscription_expired',
+        message: 'Your subscription has expired. Please renew to add transactions.'
+      };
+    }
+    
+    // Check if free trial not available (had paid before)
+    if (usage.tier === 'free' && usage.had_paid_subscription) {
+      return {
+        canAdd: false,
+        reason: 'free_trial_not_available',
+        message: 'Free tier is not available after having a paid subscription.'
+      };
+    }
+    
+    // Check transaction limits
     const { transactions } = usage;
     if (transactions.unlimited) return { canAdd: true };
+    
+    const canAdd = transactions.used < transactions.limit;
+    const isFree = usage.tier === 'free';
+    
     return {
-      canAdd: transactions.used < transactions.limit,
+      canAdd,
       used: transactions.used,
       limit: transactions.limit,
-      remaining: transactions.remaining
+      remaining: transactions.remaining,
+      limitType: isFree ? 'total' : 'monthly',
+      reason: canAdd ? null : (isFree ? 'free_limit_exceeded' : 'monthly_limit_exceeded'),
+      message: canAdd ? null : (
+        isFree 
+          ? `You've reached the free tier limit of ${transactions.limit} total transactions.`
+          : `You've reached your monthly limit of ${transactions.limit} transactions.`
+      )
     };
+  };
+
+  const canAddTransaction = () => {
+    const check = checkTransactionLimit();
+    return check.canAdd;
   };
 
   const promptUpgrade = (reason) => {
