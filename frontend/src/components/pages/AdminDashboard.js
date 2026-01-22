@@ -700,7 +700,7 @@ function AdminUsers() {
             </div>
             <div className="mb-4 p-3 bg-amber-500/10 rounded-xl border border-amber-500/20">
               <p className="text-sm text-amber-600 dark:text-amber-400">
-                <strong>Note:</strong> Agents can sign up new users with promotional discounts. They'll have access to the Agent Portal.
+                <strong>Note:</strong> Agents can sign up new users with promotional discounts. They&apos;ll have access to the Agent Portal.
               </p>
             </div>
             <div className="flex gap-3">
