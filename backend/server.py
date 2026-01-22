@@ -4106,6 +4106,93 @@ async def admin_change_user_tier(user_id: str, tier: str, admin: dict = Depends(
     return {"status": "success", "message": f"User tier changed from {old_tier} to {tier}"}
 
 
+@app.post("/api/admin/users/{user_id}/promote-to-agent")
+async def admin_promote_to_agent(user_id: str, agent_initials: str, admin: dict = Depends(require_superadmin)):
+    """Promote a user to agent role (superadmin only)"""
+    # Validate agent initials
+    agent_initials = agent_initials.strip().upper()
+    if len(agent_initials) < 2 or len(agent_initials) > 5:
+        raise HTTPException(status_code=400, detail="Agent initials must be 2-5 characters")
+    
+    user = await users_collection.find_one({"user_id": user_id}, {"_id": 0})
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    old_role = user.get("role", "user")
+    
+    if old_role in ["admin", "superadmin"]:
+        raise HTTPException(status_code=400, detail="Cannot demote admin/superadmin to agent")
+    
+    if old_role == "agent":
+        raise HTTPException(status_code=400, detail="User is already an agent")
+    
+    # Check if agent initials are already in use
+    existing_agent = await users_collection.find_one({
+        "agent_initials": agent_initials,
+        "user_id": {"$ne": user_id}
+    }, {"_id": 0})
+    
+    if existing_agent:
+        raise HTTPException(status_code=400, detail=f"Agent initials '{agent_initials}' are already in use by another agent")
+    
+    # Update user to agent role
+    await users_collection.update_one(
+        {"user_id": user_id},
+        {"$set": {
+            "role": "agent",
+            "agent_initials": agent_initials,
+            "promoted_to_agent_at": datetime.now(timezone.utc).isoformat(),
+            "promoted_by": admin["user_id"],
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    await log_admin_action(admin["user_id"], "promote_to_agent", "user", user_id, {
+        "old_role": old_role,
+        "new_role": "agent",
+        "agent_initials": agent_initials
+    })
+    
+    return {
+        "status": "success",
+        "message": f"User {user.get('email')} promoted to agent with initials '{agent_initials}'",
+        "agent_initials": agent_initials
+    }
+
+
+@app.post("/api/admin/users/{user_id}/revoke-agent")
+async def admin_revoke_agent(user_id: str, admin: dict = Depends(require_superadmin)):
+    """Revoke agent role from a user (superadmin only)"""
+    user = await users_collection.find_one({"user_id": user_id}, {"_id": 0})
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    if user.get("role") != "agent":
+        raise HTTPException(status_code=400, detail="User is not an agent")
+    
+    # Update user back to regular user role
+    await users_collection.update_one(
+        {"user_id": user_id},
+        {"$set": {
+            "role": "user",
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        },
+        "$unset": {
+            "agent_initials": "",
+            "promoted_to_agent_at": "",
+            "promoted_by": ""
+        }}
+    )
+    
+    await log_admin_action(admin["user_id"], "revoke_agent", "user", user_id, {
+        "old_agent_initials": user.get("agent_initials")
+    })
+    
+    return {"status": "success", "message": f"Agent role revoked from {user.get('email')}"}
+
+
 # ============== ADMIN BUSINESSES ==============
 
 @app.get("/api/admin/businesses")
