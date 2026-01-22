@@ -2568,17 +2568,31 @@ async def get_checkout_status(session_id: str, user: dict = Depends(get_current_
 
 @app.post("/api/webhooks/stripe")
 async def stripe_webhook(request: Request):
-    """Handle Stripe webhook events"""
+    """Handle Stripe webhook events with signature verification"""
     try:
         payload = await request.body()
-        # For simplicity, we process without signature verification in test mode
-        # In production, add signature verification
+        sig_header = request.headers.get("stripe-signature")
         
-        import json
-        event = json.loads(payload)
+        webhook_secret = os.environ.get("STRIPE_WEBHOOK_SECRET")
         
-        event_type = event.get("type")
-        data = event.get("data", {}).get("object", {})
+        # Verify webhook signature if secret is configured
+        if webhook_secret and sig_header:
+            try:
+                event = stripe.Webhook.construct_event(
+                    payload, sig_header, webhook_secret
+                )
+            except stripe.error.SignatureVerificationError as e:
+                logger.error(f"Webhook signature verification failed: {e}")
+                raise HTTPException(status_code=400, detail="Invalid signature")
+        else:
+            # Fallback for development/testing without signature verification
+            import json
+            event = json.loads(payload)
+        
+        event_type = event.get("type") if isinstance(event, dict) else event["type"]
+        data = event.get("data", {}).get("object", {}) if isinstance(event, dict) else event["data"]["object"]
+        
+        logger.info(f"Received Stripe webhook: {event_type}")
         
         if event_type == "checkout.session.completed":
             session_id = data.get("id")
@@ -2614,14 +2628,36 @@ async def stripe_webhook(request: Request):
                     upsert=True
                 )
                 
+                # Mark user as having had a paid subscription
+                await users_collection.update_one(
+                    {"user_id": user_id},
+                    {"$set": {"had_paid_subscription": True}}
+                )
+                
                 if payment_id:
                     await payment_transactions_collection.update_one(
                         {"payment_id": payment_id},
                         {"$set": {"status": "completed", "completed_at": now.isoformat()}}
                     )
+                
+                logger.info(f"Subscription activated for user {user_id}: {tier} ({billing_cycle})")
+        
+        elif event_type == "customer.subscription.updated":
+            # Handle subscription updates (e.g., plan changes)
+            stripe_sub_id = data.get("id")
+            status = data.get("status")
+            logger.info(f"Subscription updated: {stripe_sub_id} -> {status}")
+        
+        elif event_type == "customer.subscription.deleted":
+            # Handle subscription cancellation
+            stripe_sub_id = data.get("id")
+            logger.info(f"Subscription deleted: {stripe_sub_id}")
         
         return {"received": True}
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Webhook error: {e}")
         return {"received": True, "error": str(e)}
 
 
