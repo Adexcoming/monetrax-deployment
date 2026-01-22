@@ -3326,6 +3326,321 @@ async def send_test_email(user: dict = Depends(get_current_user)):
     return result
 
 
+# ============== AGENT SYSTEM ==============
+
+# Agent Pydantic Models
+class AgentUserSignup(BaseModel):
+    name: str = Field(..., min_length=2)
+    email: Optional[EmailStr] = None
+    phone: Optional[str] = None
+    tier: str = Field(..., pattern='^(starter|business|enterprise)$')
+    agent_initials: str = Field(..., min_length=2, max_length=5)
+    business_name: Optional[str] = None
+    business_type: Optional[str] = None
+
+
+class AgentSignupResponse(BaseModel):
+    user_id: str
+    email: Optional[str]
+    phone: Optional[str]
+    name: str
+    tier: str
+    promo_price: float
+    regular_price: float
+    savings: float
+    agent_tag: str
+    promo_used: bool
+    temp_password: Optional[str] = None
+
+
+@app.get("/api/agent/dashboard")
+async def agent_dashboard(agent: dict = Depends(require_agent)):
+    """Get agent dashboard with their signup statistics"""
+    agent_id = agent["user_id"]
+    agent_initials = agent.get("agent_initials", "")
+    
+    # Get all signups by this agent
+    signups = await agent_signups_collection.find(
+        {"agent_id": agent_id},
+        {"_id": 0}
+    ).to_list(length=1000)
+    
+    # Calculate statistics
+    total_signups = len(signups)
+    total_promo_used = sum(1 for s in signups if s.get("promo_applied"))
+    total_savings_given = sum(s.get("savings", 0) for s in signups)
+    
+    # Signups by tier
+    by_tier = {"starter": 0, "business": 0, "enterprise": 0}
+    for signup in signups:
+        tier = signup.get("tier")
+        if tier in by_tier:
+            by_tier[tier] += 1
+    
+    # Recent signups
+    recent_signups = sorted(signups, key=lambda x: x.get("created_at", ""), reverse=True)[:10]
+    
+    return {
+        "agent_id": agent_id,
+        "agent_name": agent.get("name"),
+        "agent_initials": agent_initials,
+        "statistics": {
+            "total_signups": total_signups,
+            "promo_signups": total_promo_used,
+            "total_savings_given": total_savings_given,
+            "by_tier": by_tier
+        },
+        "promotional_pricing": AGENT_PROMOTIONAL_PRICING,
+        "recent_signups": recent_signups
+    }
+
+
+@app.get("/api/agent/promotional-plans")
+async def get_promotional_plans(agent: dict = Depends(require_agent)):
+    """Get available promotional plans for agents"""
+    plans = []
+    for tier_key in ["starter", "business", "enterprise"]:
+        tier_data = SUBSCRIPTION_TIERS[tier_key]
+        promo_data = AGENT_PROMOTIONAL_PRICING[tier_key]
+        
+        plans.append({
+            "tier": tier_key,
+            "name": tier_data["name"],
+            "regular_price": promo_data["regular_price_monthly"],
+            "promo_price": promo_data["promo_price_monthly"],
+            "savings": promo_data["savings"],
+            "features": tier_data["features"],
+            "description": tier_data["description"]
+        })
+    
+    return {"plans": plans}
+
+
+@app.post("/api/agent/signup-user", response_model=AgentSignupResponse)
+async def agent_signup_user(data: AgentUserSignup, agent: dict = Depends(require_agent)):
+    """Agent signs up a new user with promotional pricing"""
+    
+    # Validate that either email or phone is provided
+    if not data.email and not data.phone:
+        raise HTTPException(status_code=400, detail="Either email or phone is required")
+    
+    # Check if user already exists
+    query = {}
+    if data.email:
+        query["email"] = data.email.lower()
+    if data.phone:
+        phone = data.phone.replace(" ", "").replace("-", "")
+        if phone.startswith("0"):
+            phone = "+234" + phone[1:]
+        elif not phone.startswith("+"):
+            phone = "+234" + phone
+        query["phone"] = phone
+    
+    existing_user = await users_collection.find_one(
+        {"$or": [{"email": query.get("email")}, {"phone": query.get("phone")}]} if query.get("email") and query.get("phone") 
+        else query,
+        {"_id": 0}
+    )
+    
+    if existing_user:
+        # Check if user already used promotional discount
+        if existing_user.get("promo_discount_used"):
+            raise HTTPException(
+                status_code=400, 
+                detail="This user has already used their promotional discount. They can subscribe at regular prices."
+            )
+        
+        # Update existing user with promo eligibility
+        user_id = existing_user["user_id"]
+    else:
+        # Create new user
+        user_id = generate_id("user")
+        temp_password = secrets.token_urlsafe(8)
+        hashed_password = hash_password(temp_password)
+        
+        now = datetime.now(timezone.utc)
+        
+        new_user = {
+            "user_id": user_id,
+            "name": data.name,
+            "auth_provider": "agent",
+            "role": "user",
+            "status": "active",
+            "agent_tag": data.agent_initials.upper(),
+            "signed_up_by_agent": agent["user_id"],
+            "promo_discount_used": False,
+            "promo_eligible": True,
+            "created_at": now.isoformat()
+        }
+        
+        if data.email:
+            new_user["email"] = data.email.lower()
+            new_user["password_hash"] = hashed_password
+        
+        if data.phone:
+            phone = data.phone.replace(" ", "").replace("-", "")
+            if phone.startswith("0"):
+                phone = "+234" + phone[1:]
+            elif not phone.startswith("+"):
+                phone = "+234" + phone
+            new_user["phone"] = phone
+        
+        await users_collection.insert_one(new_user)
+    
+    # Get promotional pricing
+    promo_data = AGENT_PROMOTIONAL_PRICING[data.tier]
+    tier_data = SUBSCRIPTION_TIERS[data.tier]
+    
+    now = datetime.now(timezone.utc)
+    
+    # Create subscription with promotional pricing
+    subscription_id = generate_id("sub")
+    period_end = now + timedelta(days=30)
+    
+    await subscriptions_collection.update_one(
+        {"user_id": user_id},
+        {"$set": {
+            "subscription_id": subscription_id,
+            "user_id": user_id,
+            "tier": data.tier,
+            "status": "pending_payment",
+            "billing_cycle": "monthly",
+            "is_promotional": True,
+            "promo_price": promo_data["promo_price_monthly"],
+            "regular_price": promo_data["regular_price_monthly"],
+            "agent_id": agent["user_id"],
+            "agent_tag": data.agent_initials.upper(),
+            "current_period_start": now.isoformat(),
+            "current_period_end": period_end.isoformat(),
+            "created_at": now.isoformat()
+        }},
+        upsert=True
+    )
+    
+    # Mark user as having used promo
+    await users_collection.update_one(
+        {"user_id": user_id},
+        {"$set": {
+            "promo_discount_used": True,
+            "promo_tier": data.tier,
+            "agent_tag": data.agent_initials.upper()
+        }}
+    )
+    
+    # Log the signup
+    await agent_signups_collection.insert_one({
+        "signup_id": generate_id("ags"),
+        "agent_id": agent["user_id"],
+        "agent_tag": data.agent_initials.upper(),
+        "user_id": user_id,
+        "user_name": data.name,
+        "user_email": data.email.lower() if data.email else None,
+        "user_phone": query.get("phone"),
+        "tier": data.tier,
+        "promo_price": promo_data["promo_price_monthly"],
+        "regular_price": promo_data["regular_price_monthly"],
+        "savings": promo_data["savings"],
+        "promo_applied": True,
+        "business_name": data.business_name,
+        "business_type": data.business_type,
+        "created_at": now.isoformat()
+    })
+    
+    # Create business if provided
+    if data.business_name:
+        business_id = generate_id("biz")
+        await businesses_collection.insert_one({
+            "business_id": business_id,
+            "user_id": user_id,
+            "name": data.business_name,
+            "type": data.business_type or "General",
+            "created_at": now.isoformat()
+        })
+    
+    return AgentSignupResponse(
+        user_id=user_id,
+        email=data.email,
+        phone=query.get("phone") if data.phone else None,
+        name=data.name,
+        tier=data.tier,
+        promo_price=promo_data["promo_price_monthly"],
+        regular_price=promo_data["regular_price_monthly"],
+        savings=promo_data["savings"],
+        agent_tag=data.agent_initials.upper(),
+        promo_used=True,
+        temp_password=temp_password if not existing_user else None
+    )
+
+
+@app.get("/api/agent/signups")
+async def get_agent_signups(
+    agent: dict = Depends(require_agent),
+    page: int = 1,
+    limit: int = 20,
+    tier: Optional[str] = None
+):
+    """Get list of users signed up by this agent"""
+    agent_id = agent["user_id"]
+    
+    query = {"agent_id": agent_id}
+    if tier:
+        query["tier"] = tier
+    
+    skip = (page - 1) * limit
+    
+    signups = await agent_signups_collection.find(
+        query, {"_id": 0}
+    ).sort("created_at", -1).skip(skip).limit(limit).to_list(length=limit)
+    
+    total = await agent_signups_collection.count_documents(query)
+    
+    return {
+        "signups": signups,
+        "pagination": {
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "pages": (total + limit - 1) // limit
+        }
+    }
+
+
+@app.get("/api/agent/check-user/{identifier}")
+async def agent_check_user_eligibility(identifier: str, agent: dict = Depends(require_agent)):
+    """Check if a user is eligible for promotional pricing"""
+    # Try to find by email or phone
+    user = await users_collection.find_one(
+        {"$or": [
+            {"email": identifier.lower()},
+            {"phone": identifier},
+            {"phone": "+234" + identifier[1:] if identifier.startswith("0") else identifier}
+        ]},
+        {"_id": 0}
+    )
+    
+    if not user:
+        return {
+            "found": False,
+            "eligible_for_promo": True,
+            "message": "New user - eligible for promotional discount"
+        }
+    
+    promo_used = user.get("promo_discount_used", False)
+    
+    return {
+        "found": True,
+        "user_id": user.get("user_id"),
+        "name": user.get("name"),
+        "email": user.get("email"),
+        "phone": user.get("phone"),
+        "current_tier": user.get("subscription_tier", "free"),
+        "eligible_for_promo": not promo_used,
+        "promo_used": promo_used,
+        "agent_tag": user.get("agent_tag"),
+        "message": "Already used promotional discount" if promo_used else "Eligible for promotional discount"
+    }
+
+
 # ============== ADMIN SYSTEM ==============
 
 # Admin collections
