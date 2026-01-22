@@ -3944,7 +3944,7 @@ async def admin_update_user(user_id: str, update: AdminUserUpdate, admin: dict =
         if admin.get("role") != "superadmin" and update.role in ["admin", "superadmin"]:
             raise HTTPException(status_code=403, detail="Only superadmin can assign admin roles")
         
-        if update.role not in ["user", "admin", "superadmin"]:
+        if update.role not in ["user", "agent", "admin", "superadmin"]:
             raise HTTPException(status_code=400, detail="Invalid role")
         
         update_data["role"] = update.role
