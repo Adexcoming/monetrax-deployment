@@ -502,13 +502,21 @@ function AdminUsers() {
                       </div>
                     </td>
                     <td className="p-4">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        user.role === 'superadmin' ? 'bg-purple-500/10 text-purple-500' :
-                        user.role === 'admin' ? 'bg-red-500/10 text-red-500' :
-                        'bg-secondary text-muted-foreground'
-                      }`}>
-                        {user.role || 'user'}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          user.role === 'superadmin' ? 'bg-purple-500/10 text-purple-500' :
+                          user.role === 'admin' ? 'bg-red-500/10 text-red-500' :
+                          user.role === 'agent' ? 'bg-amber-500/10 text-amber-500' :
+                          'bg-secondary text-muted-foreground'
+                        }`}>
+                          {user.role || 'user'}
+                        </span>
+                        {user.role === 'agent' && user.agent_initials && (
+                          <span className="text-xs text-amber-500 font-semibold" title="Agent Initials">
+                            [{user.agent_initials}]
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="p-4">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${
