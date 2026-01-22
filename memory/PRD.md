@@ -129,8 +129,8 @@ Monetrax is now available as a PWA that can be installed on both Android and iOS
 - ✅ Mobile-responsive design
 - ✅ Safe area support for notched devices
 
-### Admin System (NEW - Jan 21, 2026)
-- ✅ Role-based access control (user, admin, superadmin)
+### Admin System (Jan 21, 2026)
+- ✅ Role-based access control (user, agent, admin, superadmin)
 - ✅ Admin Dashboard at /admin route
 - ✅ User Management (list, search, suspend, activate)
 - ✅ Business Management (list, search, view details)
@@ -141,9 +141,22 @@ Monetrax is now available as a PWA that can be installed on both Android and iOS
 - ✅ System Settings (superadmin only)
 - ✅ Migration script to set superadmin: `/app/backend/migrations/set_superadmin.py`
 
-## Testing Results (Jan 21, 2026)
-- Backend: 100% passed (27/27 tests)
-- Frontend: 100% passed
+### Agent System (NEW - Jan 22, 2026)
+- ✅ Agent role with unique initials
+- ✅ Agent Portal at /agent route with Dashboard, Sign Up User, and My Signups tabs
+- ✅ Superadmin can promote users to agent via Admin Panel
+- ✅ Superadmin can revoke agent status
+- ✅ Agents can sign up new users with promotional discounts
+- ✅ Users are tagged with agent initials for tracking
+- ✅ Promotional pricing: Starter (₦3,000), Business (₦8,000), Enterprise (₦15,000)
+- ✅ Agent dashboard shows statistics (total signups, promo signups, total savings)
+- ✅ Check user eligibility for promotional pricing
+- ✅ Paginated signups list with tier filter
+
+## Testing Results (Jan 22, 2026)
+- Backend: 100% passed (25/25 agent system tests)
+- Frontend: 100% passed (Admin + Agent Portal features)
+- Agent System: Fully tested with RBAC verification
 - Admin System: Fully tested with RBAC verification
 - PWA: 100% passed
 
@@ -155,17 +168,19 @@ Monetrax is now available as a PWA that can be installed on both Android and iOS
 - ✅ Email Notifications
 - ✅ PWA Implementation
 - ✅ Admin System with RBAC
+- ✅ Agent System with promotional pricing
 
 ### P1 - High Priority (Next)
 - Frontend component refactoring (App.js is 3000+ lines)
 - Email notifications for tax deadlines (scheduled cron job)
+- Agent Commission System (track and calculate agent commissions)
 - Push notification integration for tax reminders
-- WhatsApp integration for transaction recording
 
 ### P2 - Medium Priority
 - Multi-currency support
 - Bank statement parsing
 - Recurring transactions
+- WhatsApp integration for transaction recording
 
 ### P3 - Nice to Have
 - Native mobile apps (React Native)
