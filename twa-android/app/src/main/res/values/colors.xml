@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Primary brand colors -->
+    <color name="colorPrimary">#001F4F</color>
+    <color name="colorPrimaryDark">#001534</color>
+    <color name="colorAccent">#10B981</color>
+    
+    <!-- Status bar and navigation bar -->
+    <color name="statusBarColor">#001F4F</color>
+    <color name="navigationBarColor">#0A0A0A</color>
+    <color name="navigationBarColorDark">#0A0A0A</color>
+    
+    <!-- Splash screen -->
+    <color name="backgroundColor">#0A0A0A</color>
+    <color name="splashBackgroundColor">#0A0A0A</color>
+    
+    <!-- Text colors -->
+    <color name="textPrimary">#FFFFFF</color>
+    <color name="textSecondary">#A1A1AA</color>
+    
+    <!-- Accent colors -->
+    <color name="emerald500">#10B981</color>
+    <color name="teal600">#0D9488</color>
+</resources>
