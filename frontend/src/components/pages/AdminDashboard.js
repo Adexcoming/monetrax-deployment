@@ -394,6 +394,36 @@ function AdminUsers() {
     }
   };
 
+  const handlePromoteToAgent = async () => {
+    if (!showAgentModal || !agentInitials.trim()) {
+      toast.error('Agent initials are required');
+      return;
+    }
+    setActionLoading('agent');
+    try {
+      await apiCall(`/api/admin/users/${showAgentModal.user_id}/promote-to-agent?agent_initials=${encodeURIComponent(agentInitials.trim().toUpperCase())}`, { method: 'POST' });
+      toast.success(`${showAgentModal.email} promoted to agent with initials "${agentInitials.toUpperCase()}"`);
+      setShowAgentModal(null);
+      setAgentInitials('');
+      fetchUsers();
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleRevokeAgent = async (userId, userEmail) => {
+    if (!window.confirm(`Are you sure you want to revoke agent status from ${userEmail}?`)) return;
+    try {
+      await apiCall(`/api/admin/users/${userId}/revoke-agent`, { method: 'POST' });
+      toast.success('Agent status revoked');
+      fetchUsers();
+    } catch (error) {
+      toast.error(error.message);
+    }
+  };
+
   return (
     <div className="p-4 lg:p-8 space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
