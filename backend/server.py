@@ -2292,9 +2292,29 @@ SUBSCRIPTION_TIERS = {
     }
 }
 
+# Agent Promotional Pricing (one-time discount per user)
+AGENT_PROMOTIONAL_PRICING = {
+    "starter": {
+        "promo_price_monthly": 3000.00,  # ₦3,000 instead of ₦5,000
+        "regular_price_monthly": 5000.00,
+        "savings": 2000.00
+    },
+    "business": {
+        "promo_price_monthly": 8000.00,  # ₦8,000 instead of ₦10,000
+        "regular_price_monthly": 10000.00,
+        "savings": 2000.00
+    },
+    "enterprise": {
+        "promo_price_monthly": 15000.00,  # ₦15,000 instead of ₦20,000
+        "regular_price_monthly": 20000.00,
+        "savings": 5000.00
+    }
+}
+
 # Subscription collection
 subscriptions_collection = db["subscriptions"]
 payment_transactions_collection = db["payment_transactions"]
+agent_signups_collection = db["agent_signups"]
 
 
 class SubscriptionPlan(BaseModel):
