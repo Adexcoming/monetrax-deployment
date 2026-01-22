@@ -662,6 +662,70 @@ function AdminUsers() {
           </div>
         </div>
       )}
+
+      {/* Promote to Agent Modal */}
+      {showAgentModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="glass rounded-2xl p-6 max-w-md w-full animate-fade-in">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold flex items-center gap-2">
+                <UserPlus className="w-5 h-5 text-amber-500" />
+                Promote to Agent
+              </h3>
+              <button onClick={() => setShowAgentModal(null)} className="p-2 hover:bg-secondary rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="mb-4">
+              <p className="text-sm text-muted-foreground mb-2">
+                Promoting: <span className="font-medium text-foreground">{showAgentModal.name}</span>
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Email: <span className="font-medium text-foreground">{showAgentModal.email}</span>
+              </p>
+            </div>
+            <div className="mb-6">
+              <label className="text-sm font-medium mb-2 block">Agent Initials (2-5 characters) *</label>
+              <input
+                type="text"
+                value={agentInitials}
+                onChange={(e) => setAgentInitials(e.target.value.toUpperCase())}
+                placeholder="e.g., JD, ABC"
+                maxLength={5}
+                className="w-full bg-secondary/50 border border-border rounded-xl px-4 py-3 uppercase"
+              />
+              <p className="text-xs text-muted-foreground mt-2">
+                This tag will be used to identify users signed up by this agent.
+              </p>
+            </div>
+            <div className="mb-4 p-3 bg-amber-500/10 rounded-xl border border-amber-500/20">
+              <p className="text-sm text-amber-600 dark:text-amber-400">
+                <strong>Note:</strong> Agents can sign up new users with promotional discounts. They'll have access to the Agent Portal.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={handlePromoteToAgent}
+                disabled={!agentInitials.trim() || agentInitials.length < 2 || actionLoading === 'agent'}
+                className="flex-1 bg-amber-500 hover:bg-amber-600 text-white font-medium py-3 rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {actionLoading === 'agent' ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <UserPlus className="w-4 h-4" />
+                )}
+                Promote to Agent
+              </button>
+              <button
+                onClick={() => setShowAgentModal(null)}
+                className="flex-1 bg-secondary hover:bg-secondary/80 py-3 rounded-xl transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
