@@ -394,6 +394,7 @@ function SubscriptionProvider({ children }) {
       loading,
       checkFeatureAccess,
       checkTransactionLimit,
+      canAddTransaction,
       promptUpgrade,
       refreshSubscription: fetchSubscription,
       tier: subscription?.tier || 'free',
