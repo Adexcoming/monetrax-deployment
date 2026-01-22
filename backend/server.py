@@ -1038,35 +1038,103 @@ async def create_transaction(data: TransactionCreate, user: dict = Depends(get_c
     tier = subscription.get("tier", "free") if subscription else "free"
     tier_data = SUBSCRIPTION_TIERS.get(tier, SUBSCRIPTION_TIERS["free"])
     
+    now = datetime.now(timezone.utc)
+    
+    # Check if paid subscription has expired
+    if subscription and tier != "free":
+        current_period_end = subscription.get("current_period_end")
+        if current_period_end:
+            if isinstance(current_period_end, str):
+                period_end = datetime.fromisoformat(current_period_end.replace('Z', '+00:00'))
+            else:
+                period_end = current_period_end
+            
+            if period_end.tzinfo is None:
+                period_end = period_end.replace(tzinfo=timezone.utc)
+            
+            # Subscription has expired - user can only view, not add
+            if period_end < now:
+                raise HTTPException(
+                    status_code=403,
+                    detail={
+                        "error": "subscription_expired",
+                        "message": f"Your {tier_data['name']} subscription has expired. Please renew to add new transactions.",
+                        "tier": tier,
+                        "expired_at": period_end.isoformat(),
+                        "can_view": True,
+                        "can_add": False,
+                        "renewal_required": True
+                    }
+                )
+    
     # Get transaction limit for this tier
     tx_limit = tier_data["features"]["transactions_per_month"]
     
-    # If not unlimited (-1), check monthly transaction count
+    # If not unlimited (-1), check transaction count
     if tx_limit != -1:
-        now = datetime.now(timezone.utc)
-        month_start = now.replace(day=1).strftime("%Y-%m-%d")
-        
-        # Count transactions this month
-        monthly_tx_count = await transactions_collection.count_documents({
-            "business_id": business["business_id"],
-            "date": {"$gte": month_start}
-        })
-        
-        if monthly_tx_count >= tx_limit:
-            raise HTTPException(
-                status_code=403, 
-                detail={
-                    "error": "transaction_limit_exceeded",
-                    "message": f"You have reached your monthly limit of {tx_limit} transactions on the {tier_data['name']} plan.",
-                    "current_count": monthly_tx_count,
-                    "limit": tx_limit,
-                    "tier": tier,
-                    "upgrade_required": True
-                }
-            )
+        if tier == "free":
+            # FREE TIER: 50 transactions TOTAL (not monthly)
+            # Check if user ever had a paid subscription (no re-trial)
+            had_paid = user.get("had_paid_subscription", False)
+            if not had_paid and subscription:
+                had_paid = await payment_transactions_collection.find_one(
+                    {"user_id": user_id, "status": "completed"},
+                    {"_id": 0}
+                ) is not None
+            
+            if had_paid:
+                raise HTTPException(
+                    status_code=403,
+                    detail={
+                        "error": "free_trial_expired",
+                        "message": "Free tier is not available after having a paid subscription. Please upgrade to continue.",
+                        "tier": tier,
+                        "upgrade_required": True
+                    }
+                )
+            
+            # Count TOTAL transactions (not monthly) for free tier
+            total_tx_count = await transactions_collection.count_documents({
+                "business_id": business["business_id"]
+            })
+            
+            if total_tx_count >= tx_limit:
+                raise HTTPException(
+                    status_code=403,
+                    detail={
+                        "error": "free_limit_exceeded",
+                        "message": f"You have reached the free tier limit of {tx_limit} total transactions. Upgrade to continue tracking your finances.",
+                        "current_count": total_tx_count,
+                        "limit": tx_limit,
+                        "tier": tier,
+                        "upgrade_required": True
+                    }
+                )
+        else:
+            # PAID TIERS: Monthly transaction limit
+            month_start = now.replace(day=1).strftime("%Y-%m-%d")
+            
+            # Count transactions this month
+            monthly_tx_count = await transactions_collection.count_documents({
+                "business_id": business["business_id"],
+                "date": {"$gte": month_start}
+            })
+            
+            if monthly_tx_count >= tx_limit:
+                raise HTTPException(
+                    status_code=403, 
+                    detail={
+                        "error": "monthly_limit_exceeded",
+                        "message": f"You have reached your monthly limit of {tx_limit} transactions on the {tier_data['name']} plan. Your limit resets next month.",
+                        "current_count": monthly_tx_count,
+                        "limit": tx_limit,
+                        "tier": tier,
+                        "resets_at": (now.replace(day=1) + timedelta(days=32)).replace(day=1).isoformat(),
+                        "upgrade_available": tier != "enterprise"
+                    }
+                )
     
     transaction_id = generate_id("txn")
-    now = datetime.now(timezone.utc)
     
     # Calculate VAT
     vat_amount = 0
