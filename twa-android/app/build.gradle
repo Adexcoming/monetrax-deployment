@@ -1,0 +1,55 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.monetrax.app'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.monetrax.app"
+        minSdk 21
+        targetSdk 34
+        versionCode 1
+        versionName "1.0.0"
+
+        // TWA configuration
+        manifestPlaceholders = [
+            hostName: "monetrax-admin.preview.emergentagent.com",
+            defaultUrl: "https://monetrax-admin.preview.emergentagent.com",
+            launcherName: "Monetrax",
+            assetStatements: '[{ "relation": ["delegate_permission/common.handle_all_urls"], "target": { "namespace": "android_app", "package_name": "com.monetrax.app", "sha256_cert_fingerprints": ["YOUR_SHA256_FINGERPRINT_HERE"] } }]'
+        ]
+    }
+
+    signingConfigs {
+        release {
+            // Configure your release signing config
+            // storeFile file('monetrax-release-key.jks')
+            // storePassword 'your-store-password'
+            // keyAlias 'monetrax'
+            // keyPassword 'your-key-password'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            // signingConfig signingConfigs.release
+        }
+        debug {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}
+
+dependencies {
+    implementation 'androidx.browser:browser:1.7.0'
+    implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.5.0'
+}
