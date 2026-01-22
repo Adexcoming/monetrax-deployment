@@ -2246,12 +2246,12 @@ SUBSCRIPTION_TIERS = {
         "features": {
             "transactions_per_month": 200,
             "ai_insights": True,
-            "receipt_ocr": True,
-            "pdf_reports": True,
+            "receipt_ocr": False,
+            "pdf_reports": False,
             "csv_export": True,
             "priority_support": False,
             "multi_user": False,
-            "custom_categories": True
+            "custom_categories": False
         },
         "description": "Great for small businesses",
         "highlight": False
