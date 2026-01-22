@@ -338,6 +338,14 @@ async def require_superadmin(user: dict = Depends(get_current_user)) -> dict:
     return user
 
 
+async def require_agent(user: dict = Depends(get_current_user)) -> dict:
+    """Require agent, admin, or superadmin role"""
+    role = user.get("role", "user")
+    if role not in ["agent", "admin", "superadmin"]:
+        raise HTTPException(status_code=403, detail="Agent access required")
+    return user
+
+
 async def get_user_business(user_id: str) -> Optional[dict]:
     """Get user's business"""
     return await businesses_collection.find_one({"user_id": user_id}, {"_id": 0})
