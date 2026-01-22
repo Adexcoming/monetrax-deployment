@@ -7,7 +7,7 @@ import {
   Crown, Search, ChevronRight, AlertTriangle, CheckCircle2, XCircle,
   TrendingUp, DollarSign, Activity, Clock, Eye, Ban, UserCheck,
   Flag, RefreshCw, Loader2, ChevronLeft, ChevronDown, Filter,
-  Database, Server, Mail, CreditCard, Edit, Save, X, Menu, Trash2
+  Database, Server, Mail, CreditCard, Edit, Save, X, Menu, Trash2, UserPlus, Tag
 } from 'lucide-react';
 
 // API helper for admin dashboard (local implementation to avoid context issues)
