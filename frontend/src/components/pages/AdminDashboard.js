@@ -573,6 +573,25 @@ function AdminUsers() {
                             <Ban className="w-4 h-4" />
                           </button>
                         )}
+                        {/* Agent promotion/revocation buttons - superadmin only */}
+                        {isSuperadmin && user.role === 'user' && (
+                          <button
+                            onClick={() => { setShowAgentModal(user); setAgentInitials(''); }}
+                            className="p-2 hover:bg-amber-500/10 text-amber-500 rounded-lg"
+                            title="Promote to Agent"
+                          >
+                            <UserPlus className="w-4 h-4" />
+                          </button>
+                        )}
+                        {isSuperadmin && user.role === 'agent' && (
+                          <button
+                            onClick={() => handleRevokeAgent(user.user_id, user.email)}
+                            className="p-2 hover:bg-orange-500/10 text-orange-500 rounded-lg"
+                            title="Revoke Agent Status"
+                          >
+                            <Tag className="w-4 h-4" />
+                          </button>
+                        )}
                         {isSuperadmin && user.role !== 'superadmin' && (
                           <button
                             onClick={() => handleDelete(user.user_id, user.email)}
