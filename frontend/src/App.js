@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart as RechartsPie, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import AdminDashboard from './components/pages/AdminDashboard';
+import AgentDashboard from './components/pages/AgentDashboard';
 import './App.css';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
