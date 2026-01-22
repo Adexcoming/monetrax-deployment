@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Base application theme -->
+    <style name="Theme.Monetrax" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">@color/statusBarColor</item>
+        <item name="android:navigationBarColor">@color/navigationBarColor</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+
+    <!-- Splash screen theme -->
+    <style name="Theme.Monetrax.Splash" parent="Theme.Monetrax">
+        <item name="android:windowBackground">@color/splashBackgroundColor</item>
+        <item name="android:statusBarColor">@color/splashBackgroundColor</item>
+        <item name="android:navigationBarColor">@color/splashBackgroundColor</item>
+    </style>
+</resources>
