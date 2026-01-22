@@ -457,6 +457,7 @@ function AdminUsers() {
         >
           <option value="">All Roles</option>
           <option value="user">User</option>
+          <option value="agent">Agent</option>
           <option value="admin">Admin</option>
           <option value="superadmin">Superadmin</option>
         </select>
