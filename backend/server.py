@@ -3654,6 +3654,13 @@ class AdminUserUpdate(BaseModel):
     status: Optional[str] = None
 
 
+class CreateAgentRequest(BaseModel):
+    email: EmailStr
+    name: str = Field(..., min_length=2)
+    agent_initials: str = Field(..., min_length=2, max_length=5)
+    phone: Optional[str] = None
+
+
 class TaxRuleUpdate(BaseModel):
     vat_rate: Optional[float] = None
     tax_free_threshold: Optional[float] = None
@@ -3672,6 +3679,76 @@ async def log_admin_action(admin_id: str, action: str, target_type: str, target_
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "ip_address": None  # Can be added from request
     })
+
+
+@app.post("/api/admin/create-agent")
+async def create_agent_account(data: CreateAgentRequest, admin: dict = Depends(require_superadmin)):
+    """Create a new agent account (superadmin only)"""
+    # Check if email already exists
+    existing = await users_collection.find_one({"email": data.email.lower()}, {"_id": 0})
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    # Create agent user
+    user_id = generate_id("user")
+    temp_password = secrets.token_urlsafe(10)
+    hashed_password = hash_password(temp_password)
+    
+    now = datetime.now(timezone.utc)
+    
+    await users_collection.insert_one({
+        "user_id": user_id,
+        "email": data.email.lower(),
+        "name": data.name,
+        "phone": data.phone,
+        "password_hash": hashed_password,
+        "auth_provider": "email",
+        "role": "agent",
+        "agent_initials": data.agent_initials.upper(),
+        "status": "active",
+        "created_at": now.isoformat(),
+        "created_by": admin["user_id"]
+    })
+    
+    await log_admin_action(admin["user_id"], "create_agent", "user", user_id, {
+        "email": data.email,
+        "name": data.name,
+        "agent_initials": data.agent_initials.upper()
+    })
+    
+    return {
+        "status": "success",
+        "message": "Agent account created successfully",
+        "agent": {
+            "user_id": user_id,
+            "email": data.email.lower(),
+            "name": data.name,
+            "agent_initials": data.agent_initials.upper(),
+            "temp_password": temp_password
+        },
+        "instructions": "Please share the temporary password with the agent. They should change it after first login."
+    }
+
+
+@app.get("/api/admin/agents")
+async def list_agents(admin: dict = Depends(require_admin)):
+    """List all agent accounts"""
+    agents = await users_collection.find(
+        {"role": "agent"},
+        {"_id": 0, "password_hash": 0}
+    ).to_list(length=100)
+    
+    # Get signup stats for each agent
+    for agent in agents:
+        agent_id = agent["user_id"]
+        total_signups = await agent_signups_collection.count_documents({"agent_id": agent_id})
+        total_promo = await agent_signups_collection.count_documents({"agent_id": agent_id, "promo_applied": True})
+        agent["stats"] = {
+            "total_signups": total_signups,
+            "promo_signups": total_promo
+        }
+    
+    return {"agents": agents}
 
 
 # ============== ADMIN OVERVIEW ==============
