@@ -101,7 +101,7 @@ The file should look like:
 
 After deploying, verify it's accessible:
 ```
-https://monetrax-admin.preview.emergentagent.com/.well-known/assetlinks.json
+https://msme-agent-sys.preview.emergentagent.com/.well-known/assetlinks.json
 ```
 
 ### Step 3.3: Update TWA Configuration
@@ -393,7 +393,7 @@ Built specifically for Nigerian MSMEs. Start for free today!
 | Package name | com.monetrax.app |
 | Min SDK | 21 (Android 5.0) |
 | Target SDK | 34 (Android 14) |
-| Web URL | https://monetrax-admin.preview.emergentagent.com |
+| Web URL | https://msme-agent-sys.preview.emergentagent.com |
 | Asset Links | /.well-known/assetlinks.json |
 
 ---

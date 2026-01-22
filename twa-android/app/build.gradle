@@ -16,7 +16,7 @@ android {
         // TWA configuration
         manifestPlaceholders = [
             hostName: "monetrax-admin.preview.emergentagent.com",
-            defaultUrl: "https://monetrax-admin.preview.emergentagent.com",
+            defaultUrl: "https://msme-agent-sys.preview.emergentagent.com",
             launcherName: "Monetrax",
             assetStatements: '[{ "relation": ["delegate_permission/common.handle_all_urls"], "target": { "namespace": "android_app", "package_name": "com.monetrax.app", "sha256_cert_fingerprints": ["YOUR_SHA256_FINGERPRINT_HERE"] } }]'
         ]
