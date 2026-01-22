@@ -415,8 +415,28 @@ function UpgradeModal({ reason, onClose }) {
   const reasonMessages = {
     transaction_limit: {
       title: "Transaction Limit Reached",
-      message: "You have reached your monthly transaction limit on the Free plan. Upgrade to continue tracking your business finances.",
+      message: "You have reached your transaction limit. Upgrade to continue tracking your business finances.",
       icon: Receipt
+    },
+    free_limit_exceeded: {
+      title: "Free Tier Limit Reached",
+      message: "You have used all 50 transactions on the Free tier. Upgrade to continue adding transactions.",
+      icon: Receipt
+    },
+    monthly_limit_exceeded: {
+      title: "Monthly Limit Reached",
+      message: "You have reached your monthly transaction limit. Your limit will reset next month, or upgrade for more transactions.",
+      icon: Receipt
+    },
+    subscription_expired: {
+      title: "Subscription Expired",
+      message: "Your subscription has expired. Renew now to continue adding transactions and accessing premium features.",
+      icon: Crown
+    },
+    free_trial_not_available: {
+      title: "Free Tier Not Available",
+      message: "The free tier is not available for accounts that previously had a paid subscription. Please choose a plan to continue.",
+      icon: Crown
     },
     ai_insights: {
       title: "AI Insights - Premium Feature",
@@ -424,13 +444,13 @@ function UpgradeModal({ reason, onClose }) {
       icon: Sparkles
     },
     receipt_ocr: {
-      title: "Receipt Scanning - Premium Feature",
-      message: "Automatically extract transaction data from receipts using AI-powered OCR.",
+      title: "Receipt Scanning - Business Feature",
+      message: "Automatically extract transaction data from receipts using AI-powered OCR. Available on Business plan and above.",
       icon: Camera
     },
     pdf_reports: {
-      title: "PDF Reports - Premium Feature",
-      message: "Generate professional PDF tax reports for your business records and compliance.",
+      title: "PDF Reports - Business Feature",
+      message: "Generate professional PDF tax reports for your business records and compliance. Available on Business plan and above.",
       icon: FileText
     },
     default: {
