@@ -1826,7 +1826,7 @@ function BusinessSetupModal({ onClose }) {
 
 // ============== TRANSACTIONS PAGE ==============
 function TransactionsPage() {
-  const { usage, checkFeatureAccess, promptUpgrade, refreshSubscription, tier, tierName } = useSubscription();
+  const { usage, checkFeatureAccess, checkTransactionLimit, promptUpgrade, refreshSubscription, tier, tierName } = useSubscription();
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
