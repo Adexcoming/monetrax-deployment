@@ -1209,6 +1209,7 @@ function DashboardLayout({ children }) {
   const navItems = [
     { path: '/dashboard', icon: Home, label: 'Dashboard' },
     { path: '/transactions', icon: Receipt, label: 'Transactions' },
+    { path: '/bank', icon: Building2, label: 'Bank Accounts' },
     { path: '/tax', icon: FileText, label: 'Tax' },
     { path: '/reports', icon: BarChart3, label: 'Reports' },
     { path: '/subscription', icon: Crown, label: 'Subscription' },
