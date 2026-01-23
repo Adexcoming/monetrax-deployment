@@ -148,15 +148,40 @@ Monetrax is now available as a PWA that can be installed on both Android and iOS
 - ✅ Superadmin can revoke agent status
 - ✅ Agents can sign up new users with promotional discounts
 - ✅ Users are tagged with agent initials for tracking
-- ✅ Promotional pricing: Starter (₦3,000), Business (₦8,000), Enterprise (₦15,000)
+- ✅ Promotional pricing: Starter (₦2,000), Business (₦5,000), Enterprise (₦8,000)
 - ✅ Agent dashboard shows statistics (total signups, promo signups, total savings)
 - ✅ Check user eligibility for promotional pricing
 - ✅ Paginated signups list with tier filter
 
-## Testing Results (Jan 22, 2026)
-- Backend: 100% passed (25/25 agent system tests)
-- Frontend: 100% passed (Admin + Agent Portal features)
-- Agent System: Fully tested with RBAC verification
+### Mono Bank Integration (NEW - Jan 23, 2026)
+- ✅ Bank integration foundation with Mono API
+- ✅ Support for 20+ Nigerian banks (Access, GTBank, First Bank, UBA, etc.)
+- ✅ Bank account linking flow (awaiting Mono API keys)
+- ✅ Real-time transaction sync via webhooks
+- ✅ Daily scheduled sync for lower tiers
+- ✅ Manual sync with tier-based limits
+- ✅ Auto-categorization of bank transactions
+- ✅ Import bank transactions to Monetrax
+- ✅ Bulk transaction import
+- ✅ Tier-based limits:
+  - Free: 1 account, daily sync, 3 manual syncs/day
+  - Starter: 3 accounts, daily sync, 10 manual syncs/day
+  - Business: 5 accounts, real-time sync, unlimited manual syncs
+  - Enterprise: Unlimited accounts, real-time sync, unlimited manual syncs
+- ✅ Frontend: /bank route with BankAccounts component
+- ✅ "Coming Soon" state when Mono keys not configured
+
+### Updated Subscription Pricing (Jan 23, 2026)
+- ✅ Free: ₦0/month
+- ✅ Starter: ₦3,000/month (was ₦5,000)
+- ✅ Business: ₦7,000/month (was ₦10,000)
+- ✅ Enterprise: ₦10,000/month (was ₦20,000)
+
+## Testing Results (Jan 23, 2026)
+- Backend: 100% passed (20/20 bank integration tests)
+- Frontend: 100% passed (Bank Accounts UI, navigation, pricing display)
+- Bank Integration: Foundation complete (awaiting Mono API keys)
+- Agent System: 100% passed (25/25 tests)
 - Admin System: Fully tested with RBAC verification
 - PWA: 100% passed
 
