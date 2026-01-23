@@ -1349,6 +1349,13 @@ function DashboardPage() {
     fetchData();
   }, []);
 
+  // Auto-close business setup modal when business is created
+  useEffect(() => {
+    if (business) {
+      setShowBusinessSetup(false);
+    }
+  }, [business]);
+
   const fetchData = async () => {
     setLoading(true);
     try {
