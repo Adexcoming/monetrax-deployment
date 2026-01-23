@@ -196,14 +196,15 @@ Monetrax is now available as a PWA that can be installed on both Android and iOS
 - ✅ Agent System with promotional pricing
 
 ### P1 - High Priority (Next)
+- Mono API key configuration (user to provide MONO_SECRET_KEY, MONO_PUBLIC_KEY, MONO_WEBHOOK_SECRET)
 - Frontend component refactoring (App.js is 3000+ lines)
-- Email notifications for tax deadlines (scheduled cron job)
 - Agent Commission System (track and calculate agent commissions)
+- Email notifications for tax deadlines (scheduled cron job)
 - Push notification integration for tax reminders
 
 ### P2 - Medium Priority
 - Multi-currency support
-- Bank statement parsing
+- Bank statement parsing (PDF upload)
 - Recurring transactions
 - WhatsApp integration for transaction recording
 
