@@ -2242,15 +2242,18 @@ SUBSCRIPTION_TIERS = {
             "csv_export": True,
             "priority_support": False,
             "multi_user": False,
-            "custom_categories": False
+            "custom_categories": False,
+            "linked_bank_accounts": 1,
+            "bank_sync_frequency": "daily",
+            "manual_sync_per_day": 3
         },
         "description": "Perfect for getting started",
         "highlight": False
     },
     "starter": {
         "name": "Starter",
-        "price_monthly": 5000.00,
-        "price_yearly": 50000.00,
+        "price_monthly": 3000.00,
+        "price_yearly": 30000.00,
         "features": {
             "transactions_per_month": 200,
             "ai_insights": True,
@@ -2259,15 +2262,18 @@ SUBSCRIPTION_TIERS = {
             "csv_export": True,
             "priority_support": False,
             "multi_user": False,
-            "custom_categories": False
+            "custom_categories": False,
+            "linked_bank_accounts": 3,
+            "bank_sync_frequency": "daily",
+            "manual_sync_per_day": 10
         },
         "description": "Great for small businesses",
         "highlight": False
     },
     "business": {
         "name": "Business",
-        "price_monthly": 10000.00,
-        "price_yearly": 100000.00,
+        "price_monthly": 7000.00,
+        "price_yearly": 70000.00,
         "features": {
             "transactions_per_month": 1000,
             "ai_insights": True,
@@ -2276,15 +2282,18 @@ SUBSCRIPTION_TIERS = {
             "csv_export": True,
             "priority_support": True,
             "multi_user": False,
-            "custom_categories": True
+            "custom_categories": True,
+            "linked_bank_accounts": 5,
+            "bank_sync_frequency": "realtime",
+            "manual_sync_per_day": -1  # Unlimited
         },
         "description": "Most popular for growing businesses",
         "highlight": True
     },
     "enterprise": {
         "name": "Enterprise",
-        "price_monthly": 20000.00,
-        "price_yearly": 200000.00,
+        "price_monthly": 10000.00,
+        "price_yearly": 100000.00,
         "features": {
             "transactions_per_month": -1,  # Unlimited
             "ai_insights": True,
@@ -2293,7 +2302,10 @@ SUBSCRIPTION_TIERS = {
             "csv_export": True,
             "priority_support": True,
             "multi_user": True,
-            "custom_categories": True
+            "custom_categories": True,
+            "linked_bank_accounts": -1,  # Unlimited
+            "bank_sync_frequency": "realtime",
+            "manual_sync_per_day": -1  # Unlimited
         },
         "description": "For large organizations",
         "highlight": False
@@ -2303,19 +2315,19 @@ SUBSCRIPTION_TIERS = {
 # Agent Promotional Pricing (one-time discount per user)
 AGENT_PROMOTIONAL_PRICING = {
     "starter": {
-        "promo_price_monthly": 3000.00,  # ₦3,000 instead of ₦5,000
-        "regular_price_monthly": 5000.00,
-        "savings": 2000.00
+        "promo_price_monthly": 2000.00,  # ₦2,000 instead of ₦3,000
+        "regular_price_monthly": 3000.00,
+        "savings": 1000.00
     },
     "business": {
-        "promo_price_monthly": 8000.00,  # ₦8,000 instead of ₦10,000
-        "regular_price_monthly": 10000.00,
+        "promo_price_monthly": 5000.00,  # ₦5,000 instead of ₦7,000
+        "regular_price_monthly": 7000.00,
         "savings": 2000.00
     },
     "enterprise": {
-        "promo_price_monthly": 15000.00,  # ₦15,000 instead of ₦20,000
-        "regular_price_monthly": 20000.00,
-        "savings": 5000.00
+        "promo_price_monthly": 8000.00,  # ₦8,000 instead of ₦10,000
+        "regular_price_monthly": 10000.00,
+        "savings": 2000.00
     }
 }
 
