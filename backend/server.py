@@ -4679,6 +4679,913 @@ async def admin_update_settings(settings: dict, admin: dict = Depends(require_su
     return {"status": "success", "message": "Settings updated"}
 
 
+# ============== MONO BANK INTEGRATION ==============
+# Collection for linked bank accounts
+linked_accounts_collection = db["linked_bank_accounts"]
+bank_transactions_collection = db["bank_transactions"]
+bank_sync_logs_collection = db["bank_sync_logs"]
+
+# Mono API Configuration
+MONO_SECRET_KEY = os.environ.get("MONO_SECRET_KEY", "")
+MONO_PUBLIC_KEY = os.environ.get("MONO_PUBLIC_KEY", "")
+MONO_WEBHOOK_SECRET = os.environ.get("MONO_WEBHOOK_SECRET", "")
+MONO_API_BASE = "https://api.withmono.com"
+
+
+class LinkBankRequest(BaseModel):
+    """Request to initiate bank account linking"""
+    account_type: str = "financial_data"  # financial_data or payments
+
+
+class LinkedAccountResponse(BaseModel):
+    account_id: str
+    institution_name: str
+    institution_logo: Optional[str] = None
+    account_name: str
+    account_number: str
+    account_type: str
+    balance: float
+    currency: str
+    last_synced: Optional[str] = None
+    status: str
+
+
+class BankTransactionResponse(BaseModel):
+    transaction_id: str
+    account_id: str
+    type: str  # debit or credit
+    amount: float
+    narration: str
+    date: str
+    balance: Optional[float] = None
+    category: Optional[str] = None
+    imported: bool = False
+
+
+async def get_user_tier_limits(user_id: str) -> dict:
+    """Get bank linking limits based on user's subscription tier"""
+    subscription = await subscriptions_collection.find_one({"user_id": user_id}, {"_id": 0})
+    tier = subscription.get("tier", "free") if subscription else "free"
+    tier_data = SUBSCRIPTION_TIERS.get(tier, SUBSCRIPTION_TIERS["free"])
+    
+    return {
+        "tier": tier,
+        "linked_bank_accounts": tier_data["features"].get("linked_bank_accounts", 1),
+        "bank_sync_frequency": tier_data["features"].get("bank_sync_frequency", "daily"),
+        "manual_sync_per_day": tier_data["features"].get("manual_sync_per_day", 3)
+    }
+
+
+async def check_mono_configured():
+    """Check if Mono API is configured"""
+    if not MONO_SECRET_KEY:
+        raise HTTPException(
+            status_code=503, 
+            detail="Bank integration not configured. Please contact support."
+        )
+
+
+@app.get("/api/bank/status")
+async def get_bank_integration_status(user: dict = Depends(get_current_user)):
+    """Get bank integration status and tier limits"""
+    limits = await get_user_tier_limits(user["user_id"])
+    
+    # Count linked accounts
+    linked_count = await linked_accounts_collection.count_documents({
+        "user_id": user["user_id"],
+        "status": {"$ne": "disconnected"}
+    })
+    
+    # Check today's manual syncs
+    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    today_syncs = await bank_sync_logs_collection.count_documents({
+        "user_id": user["user_id"],
+        "sync_type": "manual",
+        "created_at": {"$gte": today_start.isoformat()}
+    })
+    
+    return {
+        "configured": bool(MONO_SECRET_KEY),
+        "tier": limits["tier"],
+        "linked_accounts": linked_count,
+        "max_accounts": limits["linked_bank_accounts"],
+        "can_link_more": limits["linked_bank_accounts"] == -1 or linked_count < limits["linked_bank_accounts"],
+        "sync_frequency": limits["bank_sync_frequency"],
+        "manual_syncs_today": today_syncs,
+        "manual_syncs_limit": limits["manual_sync_per_day"],
+        "can_manual_sync": limits["manual_sync_per_day"] == -1 or today_syncs < limits["manual_sync_per_day"]
+    }
+
+
+@app.post("/api/bank/link/initiate")
+async def initiate_bank_linking(data: LinkBankRequest, user: dict = Depends(get_current_user)):
+    """Initiate bank account linking via Mono Connect"""
+    await check_mono_configured()
+    
+    limits = await get_user_tier_limits(user["user_id"])
+    linked_count = await linked_accounts_collection.count_documents({
+        "user_id": user["user_id"],
+        "status": {"$ne": "disconnected"}
+    })
+    
+    # Check limits
+    max_accounts = limits["linked_bank_accounts"]
+    if max_accounts != -1 and linked_count >= max_accounts:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "account_limit_reached",
+                "message": f"You can only link {max_accounts} bank account(s) on the {limits['tier'].title()} plan. Upgrade to link more.",
+                "current": linked_count,
+                "limit": max_accounts,
+                "upgrade_required": True
+            }
+        )
+    
+    # Create Mono Connect session
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{MONO_API_BASE}/v2/accounts/initiate",
+                headers={
+                    "mono-sec-key": MONO_SECRET_KEY,
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "customer": {
+                        "name": user.get("name", ""),
+                        "email": user.get("email", "")
+                    },
+                    "meta": {
+                        "user_id": user["user_id"]
+                    },
+                    "scope": data.account_type,
+                    "redirect_url": os.environ.get("REACT_APP_BACKEND_URL", "") + "/bank/callback"
+                },
+                timeout=30.0
+            )
+            
+            if response.status_code != 200:
+                logger.error(f"Mono initiate error: {response.text}")
+                raise HTTPException(status_code=502, detail="Failed to initiate bank linking")
+            
+            result = response.json()
+            
+            return {
+                "mono_url": result.get("mono_url"),
+                "session_id": result.get("id"),
+                "public_key": MONO_PUBLIC_KEY,
+                "instructions": "Use the Mono Connect widget with this public key to link your bank account."
+            }
+    
+    except httpx.RequestError as e:
+        logger.error(f"Mono API error: {str(e)}")
+        raise HTTPException(status_code=502, detail="Bank service temporarily unavailable")
+
+
+@app.post("/api/bank/link/exchange")
+async def exchange_bank_token(request: Request, user: dict = Depends(get_current_user)):
+    """Exchange Mono Connect code for account ID"""
+    await check_mono_configured()
+    
+    data = await request.json()
+    code = data.get("code")
+    
+    if not code:
+        raise HTTPException(status_code=400, detail="Authorization code required")
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            # Exchange code for account ID
+            response = await client.post(
+                f"{MONO_API_BASE}/account/auth",
+                headers={
+                    "mono-sec-key": MONO_SECRET_KEY,
+                    "Content-Type": "application/json"
+                },
+                json={"code": code},
+                timeout=30.0
+            )
+            
+            if response.status_code != 200:
+                logger.error(f"Mono exchange error: {response.text}")
+                raise HTTPException(status_code=400, detail="Failed to link bank account")
+            
+            result = response.json()
+            account_id = result.get("id")
+            
+            if not account_id:
+                raise HTTPException(status_code=400, detail="Invalid response from bank service")
+            
+            # Get account details
+            account_response = await client.get(
+                f"{MONO_API_BASE}/accounts/{account_id}",
+                headers={"mono-sec-key": MONO_SECRET_KEY},
+                timeout=30.0
+            )
+            
+            account_data = account_response.json() if account_response.status_code == 200 else {}
+            account_info = account_data.get("account", {})
+            institution = account_data.get("meta", {}).get("institution", {})
+            
+            # Save linked account
+            linked_account = {
+                "linked_account_id": f"link_{uuid.uuid4().hex[:12]}",
+                "user_id": user["user_id"],
+                "mono_account_id": account_id,
+                "institution_name": institution.get("name", "Unknown Bank"),
+                "institution_code": institution.get("bank_code", ""),
+                "institution_logo": institution.get("icon", ""),
+                "account_name": account_info.get("name", ""),
+                "account_number": account_info.get("accountNumber", "")[-4:] if account_info.get("accountNumber") else "****",
+                "account_type": account_info.get("type", "savings"),
+                "balance": float(account_info.get("balance", 0)) / 100,  # Convert from kobo
+                "currency": account_info.get("currency", "NGN"),
+                "status": "active",
+                "data_status": account_data.get("meta", {}).get("data_status", "PROCESSING"),
+                "last_synced": datetime.now(timezone.utc).isoformat(),
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }
+            
+            await linked_accounts_collection.insert_one(linked_account)
+            
+            # Log the link action
+            await bank_sync_logs_collection.insert_one({
+                "log_id": f"sync_{uuid.uuid4().hex[:12]}",
+                "user_id": user["user_id"],
+                "account_id": linked_account["linked_account_id"],
+                "sync_type": "initial_link",
+                "status": "success",
+                "transactions_synced": 0,
+                "created_at": datetime.now(timezone.utc).isoformat()
+            })
+            
+            return {
+                "success": True,
+                "message": "Bank account linked successfully",
+                "account": {
+                    "account_id": linked_account["linked_account_id"],
+                    "institution_name": linked_account["institution_name"],
+                    "account_name": linked_account["account_name"],
+                    "account_number": f"****{linked_account['account_number']}",
+                    "balance": linked_account["balance"],
+                    "status": linked_account["status"]
+                }
+            }
+    
+    except httpx.RequestError as e:
+        logger.error(f"Mono API error: {str(e)}")
+        raise HTTPException(status_code=502, detail="Bank service temporarily unavailable")
+
+
+@app.get("/api/bank/accounts")
+async def get_linked_accounts(user: dict = Depends(get_current_user)):
+    """Get all linked bank accounts for the user"""
+    accounts = await linked_accounts_collection.find(
+        {"user_id": user["user_id"], "status": {"$ne": "disconnected"}},
+        {"_id": 0}
+    ).to_list(length=50)
+    
+    limits = await get_user_tier_limits(user["user_id"])
+    
+    return {
+        "accounts": accounts,
+        "count": len(accounts),
+        "max_accounts": limits["linked_bank_accounts"],
+        "can_link_more": limits["linked_bank_accounts"] == -1 or len(accounts) < limits["linked_bank_accounts"]
+    }
+
+
+@app.get("/api/bank/accounts/{account_id}")
+async def get_linked_account(account_id: str, user: dict = Depends(get_current_user)):
+    """Get details of a specific linked account"""
+    account = await linked_accounts_collection.find_one(
+        {"linked_account_id": account_id, "user_id": user["user_id"]},
+        {"_id": 0}
+    )
+    
+    if not account:
+        raise HTTPException(status_code=404, detail="Linked account not found")
+    
+    # Get transaction count
+    tx_count = await bank_transactions_collection.count_documents({
+        "linked_account_id": account_id
+    })
+    
+    # Get last sync log
+    last_sync = await bank_sync_logs_collection.find_one(
+        {"account_id": account_id},
+        {"_id": 0},
+        sort=[("created_at", -1)]
+    )
+    
+    return {
+        **account,
+        "transaction_count": tx_count,
+        "last_sync": last_sync
+    }
+
+
+@app.post("/api/bank/accounts/{account_id}/sync")
+async def sync_bank_account(account_id: str, user: dict = Depends(get_current_user)):
+    """Manually sync transactions from a linked bank account"""
+    await check_mono_configured()
+    
+    account = await linked_accounts_collection.find_one(
+        {"linked_account_id": account_id, "user_id": user["user_id"]},
+        {"_id": 0}
+    )
+    
+    if not account:
+        raise HTTPException(status_code=404, detail="Linked account not found")
+    
+    # Check manual sync limits
+    limits = await get_user_tier_limits(user["user_id"])
+    if limits["manual_sync_per_day"] != -1:
+        today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        today_syncs = await bank_sync_logs_collection.count_documents({
+            "user_id": user["user_id"],
+            "sync_type": "manual",
+            "created_at": {"$gte": today_start.isoformat()}
+        })
+        
+        if today_syncs >= limits["manual_sync_per_day"]:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "error": "sync_limit_reached",
+                    "message": f"You've reached your daily limit of {limits['manual_sync_per_day']} manual syncs. Upgrade for more.",
+                    "syncs_today": today_syncs,
+                    "limit": limits["manual_sync_per_day"],
+                    "upgrade_required": True
+                }
+            )
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            # Trigger data refresh
+            refresh_response = await client.post(
+                f"{MONO_API_BASE}/accounts/{account['mono_account_id']}/sync",
+                headers={"mono-sec-key": MONO_SECRET_KEY},
+                timeout=30.0
+            )
+            
+            # Get latest transactions (last 30 days)
+            end_date = datetime.now(timezone.utc)
+            start_date = end_date - timedelta(days=30)
+            
+            tx_response = await client.get(
+                f"{MONO_API_BASE}/accounts/{account['mono_account_id']}/transactions",
+                headers={"mono-sec-key": MONO_SECRET_KEY},
+                params={
+                    "start": start_date.strftime("%d-%m-%Y"),
+                    "end": end_date.strftime("%d-%m-%Y"),
+                    "paginate": "false"
+                },
+                timeout=60.0
+            )
+            
+            transactions_synced = 0
+            if tx_response.status_code == 200:
+                tx_data = tx_response.json()
+                transactions = tx_data.get("data", [])
+                
+                for tx in transactions:
+                    # Check if transaction already exists
+                    existing = await bank_transactions_collection.find_one({
+                        "mono_transaction_id": tx.get("_id")
+                    })
+                    
+                    if not existing:
+                        # Save new transaction
+                        bank_tx = {
+                            "bank_transaction_id": f"btx_{uuid.uuid4().hex[:12]}",
+                            "linked_account_id": account_id,
+                            "user_id": user["user_id"],
+                            "mono_transaction_id": tx.get("_id"),
+                            "type": tx.get("type", "debit"),  # debit or credit
+                            "amount": abs(float(tx.get("amount", 0))) / 100,  # Convert from kobo
+                            "narration": tx.get("narration", ""),
+                            "date": tx.get("date", ""),
+                            "balance": float(tx.get("balance", 0)) / 100 if tx.get("balance") else None,
+                            "category": auto_categorize_bank_transaction(tx.get("narration", ""), tx.get("type")),
+                            "imported_to_monetrax": False,
+                            "created_at": datetime.now(timezone.utc).isoformat()
+                        }
+                        await bank_transactions_collection.insert_one(bank_tx)
+                        transactions_synced += 1
+            
+            # Update account balance
+            balance_response = await client.get(
+                f"{MONO_API_BASE}/accounts/{account['mono_account_id']}",
+                headers={"mono-sec-key": MONO_SECRET_KEY},
+                timeout=30.0
+            )
+            
+            if balance_response.status_code == 200:
+                balance_data = balance_response.json()
+                new_balance = float(balance_data.get("account", {}).get("balance", 0)) / 100
+                
+                await linked_accounts_collection.update_one(
+                    {"linked_account_id": account_id},
+                    {"$set": {
+                        "balance": new_balance,
+                        "last_synced": datetime.now(timezone.utc).isoformat()
+                    }}
+                )
+            
+            # Log sync
+            await bank_sync_logs_collection.insert_one({
+                "log_id": f"sync_{uuid.uuid4().hex[:12]}",
+                "user_id": user["user_id"],
+                "account_id": account_id,
+                "sync_type": "manual",
+                "status": "success",
+                "transactions_synced": transactions_synced,
+                "created_at": datetime.now(timezone.utc).isoformat()
+            })
+            
+            return {
+                "success": True,
+                "message": f"Synced {transactions_synced} new transactions",
+                "transactions_synced": transactions_synced,
+                "last_synced": datetime.now(timezone.utc).isoformat()
+            }
+    
+    except httpx.RequestError as e:
+        logger.error(f"Mono sync error: {str(e)}")
+        
+        # Log failed sync
+        await bank_sync_logs_collection.insert_one({
+            "log_id": f"sync_{uuid.uuid4().hex[:12]}",
+            "user_id": user["user_id"],
+            "account_id": account_id,
+            "sync_type": "manual",
+            "status": "failed",
+            "error": str(e),
+            "created_at": datetime.now(timezone.utc).isoformat()
+        })
+        
+        raise HTTPException(status_code=502, detail="Failed to sync with bank")
+
+
+def auto_categorize_bank_transaction(narration: str, tx_type: str) -> str:
+    """Auto-categorize bank transaction based on narration"""
+    narration_lower = narration.lower()
+    
+    # Income categories (for credits)
+    if tx_type == "credit":
+        if any(kw in narration_lower for kw in ["salary", "wage", "payroll"]):
+            return "Salary"
+        elif any(kw in narration_lower for kw in ["transfer from", "inward", "credit"]):
+            return "Transfer In"
+        elif any(kw in narration_lower for kw in ["interest", "dividend"]):
+            return "Interest"
+        elif any(kw in narration_lower for kw in ["refund", "reversal"]):
+            return "Refund"
+        else:
+            return "Other Income"
+    
+    # Expense categories (for debits)
+    if any(kw in narration_lower for kw in ["airtime", "mtn", "glo", "airtel", "9mobile", "recharge"]):
+        return "Communication"
+    elif any(kw in narration_lower for kw in ["electricity", "nepa", "phcn", "ekedc", "ikedc", "power"]):
+        return "Utilities"
+    elif any(kw in narration_lower for kw in ["dstv", "gotv", "startimes", "netflix", "spotify"]):
+        return "Entertainment"
+    elif any(kw in narration_lower for kw in ["uber", "bolt", "taxi", "transport", "fuel", "petrol", "diesel"]):
+        return "Transport"
+    elif any(kw in narration_lower for kw in ["restaurant", "food", "eatery", "chicken", "pizza"]):
+        return "Food"
+    elif any(kw in narration_lower for kw in ["school", "tuition", "education", "course"]):
+        return "Education"
+    elif any(kw in narration_lower for kw in ["hospital", "clinic", "pharmacy", "medical", "health"]):
+        return "Healthcare"
+    elif any(kw in narration_lower for kw in ["rent", "housing", "accommodation"]):
+        return "Rent"
+    elif any(kw in narration_lower for kw in ["transfer to", "outward", "payment"]):
+        return "Transfer Out"
+    elif any(kw in narration_lower for kw in ["atm", "withdrawal", "cash"]):
+        return "Cash Withdrawal"
+    elif any(kw in narration_lower for kw in ["pos", "card", "purchase"]):
+        return "Purchase"
+    else:
+        return "Other Expense"
+
+
+@app.get("/api/bank/accounts/{account_id}/transactions")
+async def get_bank_transactions(
+    account_id: str,
+    limit: int = 50,
+    skip: int = 0,
+    imported: Optional[bool] = None,
+    tx_type: Optional[str] = None,
+    user: dict = Depends(get_current_user)
+):
+    """Get transactions from a linked bank account"""
+    account = await linked_accounts_collection.find_one(
+        {"linked_account_id": account_id, "user_id": user["user_id"]},
+        {"_id": 0}
+    )
+    
+    if not account:
+        raise HTTPException(status_code=404, detail="Linked account not found")
+    
+    query = {"linked_account_id": account_id}
+    
+    if imported is not None:
+        query["imported_to_monetrax"] = imported
+    
+    if tx_type:
+        query["type"] = tx_type
+    
+    transactions = await bank_transactions_collection.find(
+        query, {"_id": 0}
+    ).sort("date", -1).skip(skip).limit(limit).to_list(length=limit)
+    
+    total = await bank_transactions_collection.count_documents(query)
+    
+    return {
+        "transactions": transactions,
+        "pagination": {
+            "total": total,
+            "limit": limit,
+            "skip": skip,
+            "has_more": (skip + limit) < total
+        }
+    }
+
+
+@app.post("/api/bank/transactions/{transaction_id}/import")
+async def import_bank_transaction(transaction_id: str, user: dict = Depends(get_current_user)):
+    """Import a bank transaction into Monetrax as a regular transaction"""
+    bank_tx = await bank_transactions_collection.find_one(
+        {"bank_transaction_id": transaction_id, "user_id": user["user_id"]},
+        {"_id": 0}
+    )
+    
+    if not bank_tx:
+        raise HTTPException(status_code=404, detail="Bank transaction not found")
+    
+    if bank_tx.get("imported_to_monetrax"):
+        raise HTTPException(status_code=400, detail="Transaction already imported")
+    
+    # Get user's business
+    business = await get_user_business(user["user_id"])
+    if not business:
+        raise HTTPException(status_code=400, detail="Please create a business first")
+    
+    # Map bank transaction to Monetrax transaction
+    tx_type = "income" if bank_tx["type"] == "credit" else "expense"
+    
+    # Map category to Monetrax categories
+    category_mapping = {
+        # Income
+        "Salary": "Other Income",
+        "Transfer In": "Other Income",
+        "Interest": "Interest",
+        "Refund": "Other Income",
+        "Other Income": "Other Income",
+        # Expense
+        "Communication": "Communication",
+        "Utilities": "Utilities",
+        "Entertainment": "Other Expense",
+        "Transport": "Transport",
+        "Food": "Food",
+        "Education": "Other Expense",
+        "Healthcare": "Other Expense",
+        "Rent": "Rent",
+        "Transfer Out": "Other Expense",
+        "Cash Withdrawal": "Other Expense",
+        "Purchase": "Supplies",
+        "Other Expense": "Other Expense"
+    }
+    
+    category = category_mapping.get(bank_tx.get("category", ""), "Other Expense" if tx_type == "expense" else "Other Income")
+    
+    # Create Monetrax transaction
+    monetrax_tx_id = f"txn_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc)
+    
+    # Calculate VAT for taxable transactions
+    is_taxable = tx_type == "income" and category in ["Sales", "Services", "Consulting"]
+    vat_amount = calculate_vat(bank_tx["amount"]) if is_taxable else 0
+    
+    monetrax_tx = {
+        "transaction_id": monetrax_tx_id,
+        "business_id": business["business_id"],
+        "type": tx_type,
+        "category": category,
+        "amount": bank_tx["amount"],
+        "description": bank_tx["narration"],
+        "date": bank_tx["date"][:10] if bank_tx.get("date") else now.strftime("%Y-%m-%d"),
+        "is_taxable": is_taxable,
+        "vat_amount": vat_amount,
+        "payment_method": "Bank Transfer",
+        "source": "bank_import",
+        "bank_transaction_id": transaction_id,
+        "created_at": now.isoformat()
+    }
+    
+    await transactions_collection.insert_one(monetrax_tx)
+    
+    # Mark bank transaction as imported
+    await bank_transactions_collection.update_one(
+        {"bank_transaction_id": transaction_id},
+        {"$set": {
+            "imported_to_monetrax": True,
+            "monetrax_transaction_id": monetrax_tx_id,
+            "imported_at": now.isoformat()
+        }}
+    )
+    
+    return {
+        "success": True,
+        "message": "Transaction imported successfully",
+        "monetrax_transaction_id": monetrax_tx_id,
+        "transaction": monetrax_tx
+    }
+
+
+@app.post("/api/bank/transactions/import-bulk")
+async def import_bulk_bank_transactions(request: Request, user: dict = Depends(get_current_user)):
+    """Import multiple bank transactions at once"""
+    data = await request.json()
+    transaction_ids = data.get("transaction_ids", [])
+    
+    if not transaction_ids:
+        raise HTTPException(status_code=400, detail="No transactions specified")
+    
+    if len(transaction_ids) > 100:
+        raise HTTPException(status_code=400, detail="Maximum 100 transactions per import")
+    
+    business = await get_user_business(user["user_id"])
+    if not business:
+        raise HTTPException(status_code=400, detail="Please create a business first")
+    
+    imported_count = 0
+    errors = []
+    
+    for tx_id in transaction_ids:
+        try:
+            bank_tx = await bank_transactions_collection.find_one(
+                {"bank_transaction_id": tx_id, "user_id": user["user_id"], "imported_to_monetrax": False},
+                {"_id": 0}
+            )
+            
+            if not bank_tx:
+                continue
+            
+            tx_type = "income" if bank_tx["type"] == "credit" else "expense"
+            category_mapping = {
+                "Salary": "Other Income", "Transfer In": "Other Income", "Interest": "Interest",
+                "Refund": "Other Income", "Other Income": "Other Income",
+                "Communication": "Communication", "Utilities": "Utilities", "Transport": "Transport",
+                "Food": "Food", "Rent": "Rent", "Purchase": "Supplies",
+                "Entertainment": "Other Expense", "Education": "Other Expense", "Healthcare": "Other Expense",
+                "Transfer Out": "Other Expense", "Cash Withdrawal": "Other Expense", "Other Expense": "Other Expense"
+            }
+            category = category_mapping.get(bank_tx.get("category", ""), "Other Expense" if tx_type == "expense" else "Other Income")
+            
+            monetrax_tx_id = f"txn_{uuid.uuid4().hex[:12]}"
+            now = datetime.now(timezone.utc)
+            is_taxable = tx_type == "income" and category in ["Sales", "Services", "Consulting"]
+            
+            monetrax_tx = {
+                "transaction_id": monetrax_tx_id,
+                "business_id": business["business_id"],
+                "type": tx_type,
+                "category": category,
+                "amount": bank_tx["amount"],
+                "description": bank_tx["narration"],
+                "date": bank_tx["date"][:10] if bank_tx.get("date") else now.strftime("%Y-%m-%d"),
+                "is_taxable": is_taxable,
+                "vat_amount": calculate_vat(bank_tx["amount"]) if is_taxable else 0,
+                "payment_method": "Bank Transfer",
+                "source": "bank_import",
+                "bank_transaction_id": tx_id,
+                "created_at": now.isoformat()
+            }
+            
+            await transactions_collection.insert_one(monetrax_tx)
+            await bank_transactions_collection.update_one(
+                {"bank_transaction_id": tx_id},
+                {"$set": {"imported_to_monetrax": True, "monetrax_transaction_id": monetrax_tx_id, "imported_at": now.isoformat()}}
+            )
+            imported_count += 1
+        
+        except Exception as e:
+            errors.append({"transaction_id": tx_id, "error": str(e)})
+    
+    return {
+        "success": True,
+        "imported_count": imported_count,
+        "total_requested": len(transaction_ids),
+        "errors": errors if errors else None
+    }
+
+
+@app.delete("/api/bank/accounts/{account_id}")
+async def unlink_bank_account(account_id: str, user: dict = Depends(get_current_user)):
+    """Unlink a bank account"""
+    account = await linked_accounts_collection.find_one(
+        {"linked_account_id": account_id, "user_id": user["user_id"]},
+        {"_id": 0}
+    )
+    
+    if not account:
+        raise HTTPException(status_code=404, detail="Linked account not found")
+    
+    # Mark as disconnected (keep data for history)
+    await linked_accounts_collection.update_one(
+        {"linked_account_id": account_id},
+        {"$set": {
+            "status": "disconnected",
+            "disconnected_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    # Try to unlink from Mono (optional - might fail if already disconnected)
+    if MONO_SECRET_KEY and account.get("mono_account_id"):
+        try:
+            async with httpx.AsyncClient() as client:
+                await client.post(
+                    f"{MONO_API_BASE}/accounts/{account['mono_account_id']}/unlink",
+                    headers={"mono-sec-key": MONO_SECRET_KEY},
+                    timeout=10.0
+                )
+        except:
+            pass  # Ignore errors during unlink
+    
+    return {"success": True, "message": "Bank account unlinked"}
+
+
+@app.post("/api/bank/webhook")
+async def mono_webhook(request: Request):
+    """Handle Mono webhook events for real-time updates"""
+    # Verify webhook signature if secret is configured
+    if MONO_WEBHOOK_SECRET:
+        signature = request.headers.get("mono-webhook-secret", "")
+        if signature != MONO_WEBHOOK_SECRET:
+            logger.warning("Invalid webhook signature")
+            raise HTTPException(status_code=401, detail="Invalid webhook signature")
+    
+    try:
+        payload = await request.json()
+        event_type = payload.get("event")
+        data = payload.get("data", {})
+        
+        logger.info(f"Mono webhook received: {event_type}")
+        
+        if event_type == "mono.events.account_updated":
+            # Account data has been refreshed
+            mono_account_id = data.get("account", {}).get("_id")
+            data_status = data.get("meta", {}).get("data_status")
+            
+            if mono_account_id and data_status == "AVAILABLE":
+                # Find the linked account
+                account = await linked_accounts_collection.find_one(
+                    {"mono_account_id": mono_account_id},
+                    {"_id": 0}
+                )
+                
+                if account:
+                    # Auto-sync if user has real-time sync enabled
+                    limits = await get_user_tier_limits(account["user_id"])
+                    
+                    if limits["bank_sync_frequency"] == "realtime":
+                        # Trigger background sync
+                        asyncio.create_task(background_sync_account(account))
+        
+        elif event_type == "mono.events.account_connected":
+            logger.info(f"New account connected: {data}")
+        
+        elif event_type == "mono.events.account_reauthorization_required":
+            # User needs to re-authenticate
+            mono_account_id = data.get("account", {}).get("_id")
+            
+            if mono_account_id:
+                await linked_accounts_collection.update_one(
+                    {"mono_account_id": mono_account_id},
+                    {"$set": {
+                        "status": "reauth_required",
+                        "reauth_required_at": datetime.now(timezone.utc).isoformat()
+                    }}
+                )
+        
+        return {"status": "received"}
+    
+    except Exception as e:
+        logger.error(f"Webhook processing error: {str(e)}")
+        return {"status": "error", "message": str(e)}
+
+
+async def background_sync_account(account: dict):
+    """Background task to sync account transactions"""
+    try:
+        if not MONO_SECRET_KEY:
+            return
+        
+        async with httpx.AsyncClient() as client:
+            end_date = datetime.now(timezone.utc)
+            start_date = end_date - timedelta(days=7)  # Last 7 days for real-time sync
+            
+            tx_response = await client.get(
+                f"{MONO_API_BASE}/accounts/{account['mono_account_id']}/transactions",
+                headers={"mono-sec-key": MONO_SECRET_KEY},
+                params={
+                    "start": start_date.strftime("%d-%m-%Y"),
+                    "end": end_date.strftime("%d-%m-%Y"),
+                    "paginate": "false"
+                },
+                timeout=60.0
+            )
+            
+            if tx_response.status_code == 200:
+                tx_data = tx_response.json()
+                transactions = tx_data.get("data", [])
+                transactions_synced = 0
+                
+                for tx in transactions:
+                    existing = await bank_transactions_collection.find_one({
+                        "mono_transaction_id": tx.get("_id")
+                    })
+                    
+                    if not existing:
+                        bank_tx = {
+                            "bank_transaction_id": f"btx_{uuid.uuid4().hex[:12]}",
+                            "linked_account_id": account["linked_account_id"],
+                            "user_id": account["user_id"],
+                            "mono_transaction_id": tx.get("_id"),
+                            "type": tx.get("type", "debit"),
+                            "amount": abs(float(tx.get("amount", 0))) / 100,
+                            "narration": tx.get("narration", ""),
+                            "date": tx.get("date", ""),
+                            "balance": float(tx.get("balance", 0)) / 100 if tx.get("balance") else None,
+                            "category": auto_categorize_bank_transaction(tx.get("narration", ""), tx.get("type")),
+                            "imported_to_monetrax": False,
+                            "created_at": datetime.now(timezone.utc).isoformat()
+                        }
+                        await bank_transactions_collection.insert_one(bank_tx)
+                        transactions_synced += 1
+                
+                # Update last synced
+                await linked_accounts_collection.update_one(
+                    {"linked_account_id": account["linked_account_id"]},
+                    {"$set": {"last_synced": datetime.now(timezone.utc).isoformat()}}
+                )
+                
+                # Log sync
+                await bank_sync_logs_collection.insert_one({
+                    "log_id": f"sync_{uuid.uuid4().hex[:12]}",
+                    "user_id": account["user_id"],
+                    "account_id": account["linked_account_id"],
+                    "sync_type": "realtime_webhook",
+                    "status": "success",
+                    "transactions_synced": transactions_synced,
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                })
+                
+                logger.info(f"Background sync completed for {account['linked_account_id']}: {transactions_synced} new transactions")
+    
+    except Exception as e:
+        logger.error(f"Background sync error: {str(e)}")
+
+
+@app.get("/api/bank/supported-institutions")
+async def get_supported_institutions():
+    """Get list of supported Nigerian banks"""
+    # Static list of major Nigerian banks supported by Mono
+    institutions = [
+        {"name": "Access Bank", "code": "044", "icon": "https://mono.co/banks/access.png"},
+        {"name": "First Bank", "code": "011", "icon": "https://mono.co/banks/firstbank.png"},
+        {"name": "GTBank", "code": "058", "icon": "https://mono.co/banks/gtbank.png"},
+        {"name": "UBA", "code": "033", "icon": "https://mono.co/banks/uba.png"},
+        {"name": "Zenith Bank", "code": "057", "icon": "https://mono.co/banks/zenith.png"},
+        {"name": "Union Bank", "code": "032", "icon": "https://mono.co/banks/union.png"},
+        {"name": "Stanbic IBTC", "code": "221", "icon": "https://mono.co/banks/stanbic.png"},
+        {"name": "Sterling Bank", "code": "232", "icon": "https://mono.co/banks/sterling.png"},
+        {"name": "Fidelity Bank", "code": "070", "icon": "https://mono.co/banks/fidelity.png"},
+        {"name": "Polaris Bank", "code": "076", "icon": "https://mono.co/banks/polaris.png"},
+        {"name": "Wema Bank", "code": "035", "icon": "https://mono.co/banks/wema.png"},
+        {"name": "Ecobank", "code": "050", "icon": "https://mono.co/banks/ecobank.png"},
+        {"name": "FCMB", "code": "214", "icon": "https://mono.co/banks/fcmb.png"},
+        {"name": "Keystone Bank", "code": "082", "icon": "https://mono.co/banks/keystone.png"},
+        {"name": "Unity Bank", "code": "215", "icon": "https://mono.co/banks/unity.png"},
+        {"name": "Kuda Bank", "code": "50211", "icon": "https://mono.co/banks/kuda.png"},
+        {"name": "OPay", "code": "999992", "icon": "https://mono.co/banks/opay.png"},
+        {"name": "PalmPay", "code": "999991", "icon": "https://mono.co/banks/palmpay.png"},
+        {"name": "Moniepoint", "code": "50515", "icon": "https://mono.co/banks/moniepoint.png"},
+        {"name": "Carbon", "code": "565", "icon": "https://mono.co/banks/carbon.png"}
+    ]
+    
+    return {
+        "institutions": institutions,
+        "total": len(institutions),
+        "note": "Connect your bank account to automatically sync transactions into Monetrax"
+    }
+
+
 # ============== ADMIN SEED (for initial setup) ==============
 
 @app.post("/api/admin/seed-superadmin")
