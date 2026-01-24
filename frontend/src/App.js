@@ -3687,7 +3687,7 @@ function SubscriptionPage() {
                 <div className="mb-6">
                   <div className="flex items-baseline gap-1">
                     <span className="text-3xl font-bold">
-                      {price === 0 ? 'Free' : formatCurrency(price)}
+                      {price === 0 ? 'Free' : `${plan.currency_symbol || '₦'}${price.toLocaleString()}`}
                     </span>
                     {price > 0 && (
                       <span className="text-muted-foreground text-sm">/{billingCycle === 'yearly' ? 'year' : 'month'}</span>
@@ -3695,7 +3695,12 @@ function SubscriptionPage() {
                   </div>
                   {billingCycle === 'yearly' && price > 0 && (
                     <p className="text-xs text-muted-foreground mt-1">
-                      (₦{Math.round(price / 12).toLocaleString()}/month)
+                      ({plan.currency_symbol || '₦'}{Math.round(price / 12).toLocaleString()}/month)
+                    </p>
+                  )}
+                  {selectedCurrency !== 'NGN' && price > 0 && (
+                    <p className="text-xs text-emerald-500 mt-1">
+                      ≈ ₦{(billingCycle === 'yearly' ? plan.price_yearly_ngn : plan.price_monthly_ngn)?.toLocaleString()}
                     </p>
                   )}
                 </div>
