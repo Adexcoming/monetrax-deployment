@@ -80,6 +80,129 @@ INCOME_TAX_BRACKETS = [
 TAXABLE_INCOME_CATEGORIES = ["Sales", "Services", "Consulting", "Rental Income", "Commission", "Interest"]
 DEDUCTIBLE_EXPENSE_CATEGORIES = ["Rent", "Utilities", "Salaries", "Equipment", "Supplies", "Transport", "Marketing"]
 
+# ============== VAT EXEMPTION CATEGORIES (Nigerian Tax Law Compliance) ==============
+VAT_EXEMPT_CATEGORIES = {
+    # Food & Household Essentials
+    "Basic Food": True,
+    "Baby Products": True,
+    "Sanitary Products": True,
+    
+    # Medical & Pharmaceutical
+    "Medical": True,
+    "Pharmaceutical": True,
+    "Healthcare": True,
+    "Medical Equipment": True,
+    
+    # Education
+    "Education": True,
+    "Books": True,
+    "Educational Materials": True,
+    "Tuition": True,
+    
+    # Agriculture
+    "Agriculture": True,
+    "Fertilizers": True,
+    "Seeds": True,
+    "Animal Feed": True,
+    "Farm Equipment": True,
+    "Livestock": True,
+    
+    # Energy & Petroleum
+    "Fuel": True,
+    "Diesel": True,
+    "LPG": True,
+    "Gas": True,
+    "Electricity": True,
+    "Clean Energy": True,
+    
+    # Transportation
+    "Public Transport": True,
+    "Bus Fare": True,
+    "Ferry": True,
+    "Economy Flight": True,
+    
+    # Real Estate & Land
+    "Land Sale": True,
+    "Residential Property": True,
+    "Residential Rent": True,
+    
+    # Financial Services
+    "Bank Charges": True,
+    "Loan Interest": True,
+    "Life Insurance": True,
+    "Pension": True,
+    
+    # Diplomatic & Humanitarian
+    "Diplomatic": True,
+    "Humanitarian": True,
+    "Relief Materials": True,
+}
+
+# Keywords for auto-detecting VAT-exempt transactions
+VAT_EXEMPT_KEYWORDS = [
+    # Food & Essentials
+    "rice", "beans", "yam", "cassava", "maize", "bread", "fish", "meat", "poultry", 
+    "milk", "fruit", "vegetable", "baby food", "diaper", "sanitary pad", "tampon",
+    # Medical
+    "drug", "medicine", "pharmaceutical", "hospital", "clinic", "medical", "doctor",
+    "pharmacy", "health", "diagnostic", "wheelchair", "prosthetic",
+    # Education
+    "book", "textbook", "school", "tuition", "education", "university", "college",
+    # Agriculture
+    "fertilizer", "seed", "seedling", "tractor", "farm", "feed", "livestock", "poultry feed",
+    # Energy
+    "diesel", "petrol", "fuel", "lpg", "gas", "electricity", "nepa", "phcn",
+    # Transport
+    "bus fare", "taxi", "uber", "bolt", "ferry", "danfo", "keke",
+    # Financial
+    "bank charge", "interest", "insurance premium", "pension",
+]
+
+# Income Tax Exempt Categories (Company/Personal)
+INCOME_TAX_EXEMPT_CATEGORIES = {
+    "Pension Contribution": True,
+    "Life Insurance Premium": True,
+    "National Housing Fund": True,
+    "Gratuity": True,
+    "Reimbursement": True,
+    "Charity Donation": True,
+    "Agricultural Income": True,
+    "Export Income": True,
+    "Government Bond Interest": True,
+}
+
+# ============== MULTI-CURRENCY SUPPORT ==============
+# Exchange rates relative to NGN (Nigerian Naira)
+# These should be updated regularly in production
+CURRENCY_RATES = {
+    "NGN": {"rate": 1, "symbol": "₦", "name": "Nigerian Naira"},
+    "USD": {"rate": 1550, "symbol": "$", "name": "US Dollar"},
+    "GBP": {"rate": 1950, "symbol": "£", "name": "British Pound"},
+    "EUR": {"rate": 1680, "symbol": "€", "name": "Euro"},
+    "CAD": {"rate": 1100, "symbol": "C$", "name": "Canadian Dollar"},
+    "AUD": {"rate": 1000, "symbol": "A$", "name": "Australian Dollar"},
+    "GHS": {"rate": 95, "symbol": "₵", "name": "Ghanaian Cedi"},
+    "KES": {"rate": 12, "symbol": "KSh", "name": "Kenyan Shilling"},
+    "ZAR": {"rate": 85, "symbol": "R", "name": "South African Rand"},
+    "INR": {"rate": 18.5, "symbol": "₹", "name": "Indian Rupee"},
+    "AED": {"rate": 420, "symbol": "د.إ", "name": "UAE Dirham"},
+    "CNY": {"rate": 215, "symbol": "¥", "name": "Chinese Yuan"},
+}
+
+def convert_currency(amount_ngn: float, target_currency: str) -> float:
+    """Convert NGN amount to target currency"""
+    if target_currency not in CURRENCY_RATES:
+        return amount_ngn
+    rate = CURRENCY_RATES[target_currency]["rate"]
+    return round(amount_ngn / rate, 2)
+
+def convert_to_ngn(amount: float, source_currency: str) -> float:
+    """Convert amount from source currency to NGN"""
+    if source_currency not in CURRENCY_RATES:
+        return amount
+    rate = CURRENCY_RATES[source_currency]["rate"]
+    return round(amount * rate, 2)
+
 
 # ============== PYDANTIC MODELS ==============
 class UserResponse(BaseModel):
