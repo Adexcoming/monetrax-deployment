@@ -2730,8 +2730,8 @@ async def create_checkout_session(
     
     # Create checkout session
     checkout_request = CheckoutSessionRequest(
-        amount=amount_usd,
-        currency="usd",
+        amount=amount_in_currency,
+        currency=stripe_currency,
         success_url=success_url,
         cancel_url=cancel_url,
         metadata={
@@ -2739,7 +2739,8 @@ async def create_checkout_session(
             "tier": tier,
             "billing_cycle": data.billing_cycle,
             "payment_id": payment_id,
-            "amount_ngn": str(amount)
+            "amount_ngn": str(amount_ngn),
+            "selected_currency": selected_currency
         }
     )
     
@@ -2755,7 +2756,10 @@ async def create_checkout_session(
         return {
             "checkout_url": session.url,
             "session_id": session.session_id,
-            "payment_id": payment_id
+            "payment_id": payment_id,
+            "amount": amount_in_currency,
+            "currency": stripe_currency.upper(),
+            "amount_ngn": amount_ngn
         }
     except Exception as e:
         # Mark payment as failed
