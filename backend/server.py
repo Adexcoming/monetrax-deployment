@@ -341,9 +341,39 @@ def generate_backup_codes(count: int = 10) -> list[str]:
     return [f"{secrets.token_hex(2).upper()}-{secrets.token_hex(2).upper()}" for _ in range(count)]
 
 
-def calculate_vat(amount: float, is_income: bool = True) -> float:
-    """Calculate VAT amount (7.5%)"""
+def calculate_vat(amount: float, is_income: bool = True, category: str = None, description: str = None) -> float:
+    """Calculate VAT amount (7.5%) - Returns 0 for VAT-exempt items"""
+    # Check if category is VAT-exempt
+    if category and category in VAT_EXEMPT_CATEGORIES:
+        return 0.0
+    
+    # Check if description contains VAT-exempt keywords
+    if description:
+        description_lower = description.lower()
+        for keyword in VAT_EXEMPT_KEYWORDS:
+            if keyword in description_lower:
+                return 0.0
+    
     return round(amount * VAT_RATE, 2)
+
+
+def is_vat_exempt(category: str = None, description: str = None) -> bool:
+    """Check if a transaction is VAT-exempt based on category or description"""
+    if category and category in VAT_EXEMPT_CATEGORIES:
+        return True
+    
+    if description:
+        description_lower = description.lower()
+        for keyword in VAT_EXEMPT_KEYWORDS:
+            if keyword in description_lower:
+                return True
+    
+    return False
+
+
+def is_income_tax_exempt(category: str = None) -> bool:
+    """Check if income is exempt from income tax"""
+    return category in INCOME_TAX_EXEMPT_CATEGORIES if category else False
 
 
 def calculate_income_tax(annual_income: float) -> float:
