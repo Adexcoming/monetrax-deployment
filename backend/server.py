@@ -2675,20 +2675,29 @@ async def create_checkout_session(
     
     tier_data = SUBSCRIPTION_TIERS[tier]
     
-    # Get price based on billing cycle
+    # Get price based on billing cycle (in NGN)
     if data.billing_cycle == "yearly":
-        amount = tier_data["price_yearly"]
+        amount_ngn = tier_data["price_yearly"]
     else:
-        amount = tier_data["price_monthly"]
+        amount_ngn = tier_data["price_monthly"]
     
-    # Convert NGN to USD (approximate rate for Stripe - adjust as needed)
-    # Using 1 USD = 1500 NGN for example
-    ngn_to_usd_rate = 1500
-    amount_usd = round(amount / ngn_to_usd_rate, 2)
+    # Handle multi-currency
+    selected_currency = data.currency.upper() if data.currency else "NGN"
+    
+    # For Stripe, we need to convert to a Stripe-supported currency
+    # Stripe supports: USD, EUR, GBP, CAD, AUD, etc. but NOT NGN directly
+    if selected_currency in ["USD", "EUR", "GBP", "CAD", "AUD"]:
+        # User selected a Stripe-supported currency
+        stripe_currency = selected_currency.lower()
+        amount_in_currency = convert_currency(amount_ngn, selected_currency)
+    else:
+        # Convert to USD for Stripe processing (NGN and other unsupported currencies)
+        stripe_currency = "usd"
+        amount_in_currency = convert_currency(amount_ngn, "USD")
     
     # Ensure minimum amount for Stripe
-    if amount_usd < 0.50:
-        amount_usd = 0.50
+    if amount_in_currency < 0.50:
+        amount_in_currency = 0.50
     
     stripe_api_key = os.environ.get("STRIPE_API_KEY")
     if not stripe_api_key:
@@ -2711,8 +2720,10 @@ async def create_checkout_session(
         "user_id": user["user_id"],
         "tier": tier,
         "billing_cycle": data.billing_cycle,
-        "amount_ngn": amount,
-        "amount_usd": amount_usd,
+        "amount_ngn": amount_ngn,
+        "amount_charged": amount_in_currency,
+        "currency": stripe_currency.upper(),
+        "selected_currency": selected_currency,
         "status": "pending",
         "created_at": datetime.now(timezone.utc).isoformat()
     })
