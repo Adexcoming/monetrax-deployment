@@ -3613,19 +3613,39 @@ function SubscriptionPage() {
         </div>
       )}
 
-      {/* Billing Toggle */}
-      <div className="flex items-center justify-center gap-4">
-        <span className={`text-sm ${billingCycle === 'monthly' ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>Monthly</span>
-        <button
-          onClick={() => setBillingCycle(billingCycle === 'monthly' ? 'yearly' : 'monthly')}
-          className={`relative w-14 h-7 rounded-full transition-colors ${billingCycle === 'yearly' ? 'bg-emerald-500' : 'bg-secondary'}`}
-          data-testid="billing-cycle-toggle"
-        >
-          <div className={`absolute top-1 w-5 h-5 bg-white rounded-full transition-transform ${billingCycle === 'yearly' ? 'translate-x-8' : 'translate-x-1'}`} />
-        </button>
-        <span className={`text-sm ${billingCycle === 'yearly' ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
-          Yearly <span className="text-emerald-500 text-xs">(Save 17%)</span>
-        </span>
+      {/* Currency & Billing Toggle */}
+      <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
+        {/* Currency Selector */}
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">Currency:</span>
+          <select
+            value={selectedCurrency}
+            onChange={(e) => setSelectedCurrency(e.target.value)}
+            className="bg-secondary border border-border rounded-lg px-3 py-1.5 text-sm font-medium"
+            data-testid="currency-selector"
+          >
+            {currencies.map((curr) => (
+              <option key={curr.code} value={curr.code}>
+                {curr.symbol} {curr.code} - {curr.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Billing Toggle */}
+        <div className="flex items-center gap-4">
+          <span className={`text-sm ${billingCycle === 'monthly' ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>Monthly</span>
+          <button
+            onClick={() => setBillingCycle(billingCycle === 'monthly' ? 'yearly' : 'monthly')}
+            className={`relative w-14 h-7 rounded-full transition-colors ${billingCycle === 'yearly' ? 'bg-emerald-500' : 'bg-secondary'}`}
+            data-testid="billing-cycle-toggle"
+          >
+            <div className={`absolute top-1 w-5 h-5 bg-white rounded-full transition-transform ${billingCycle === 'yearly' ? 'translate-x-8' : 'translate-x-1'}`} />
+          </button>
+          <span className={`text-sm ${billingCycle === 'yearly' ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
+            Yearly <span className="text-emerald-500 text-xs">(Save 17%)</span>
+          </span>
+        </div>
       </div>
 
       {/* Pricing Cards */}
