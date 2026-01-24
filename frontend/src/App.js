@@ -3389,6 +3389,8 @@ function MFASetupModal({ onClose }) {
 // ============== SUBSCRIPTION PAGE ==============
 function SubscriptionPage() {
   const [plans, setPlans] = useState([]);
+  const [currencies, setCurrencies] = useState([]);
+  const [selectedCurrency, setSelectedCurrency] = useState('NGN');
   const [currentSubscription, setCurrentSubscription] = useState(null);
   const [loading, setLoading] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState(null);
@@ -3401,15 +3403,33 @@ function SubscriptionPage() {
     handleReturnFromStripe();
   }, []);
 
+  useEffect(() => {
+    // Refetch plans when currency changes
+    if (selectedCurrency) {
+      fetchPlans();
+    }
+  }, [selectedCurrency]);
+
+  const fetchPlans = async () => {
+    try {
+      const plansData = await api(`/api/subscriptions/plans?currency=${selectedCurrency}`);
+      setPlans(plansData.plans);
+    } catch (error) {
+      console.error('Failed to fetch plans:', error);
+    }
+  };
+
   const fetchPlansAndSubscription = async () => {
     setLoading(true);
     try {
-      const [plansData, subData] = await Promise.all([
-        api('/api/subscriptions/plans'),
-        api('/api/subscriptions/current')
+      const [plansData, subData, currencyData] = await Promise.all([
+        api(`/api/subscriptions/plans?currency=${selectedCurrency}`),
+        api('/api/subscriptions/current'),
+        api('/api/currencies')
       ]);
       setPlans(plansData.plans);
       setCurrentSubscription(subData);
+      setCurrencies(currencyData.currencies);
     } catch (error) {
       console.error('Failed to fetch subscription data:', error);
     } finally {
