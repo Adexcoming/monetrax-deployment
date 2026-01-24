@@ -3489,7 +3489,8 @@ function SubscriptionPage() {
         body: JSON.stringify({
           tier,
           billing_cycle: billingCycle,
-          origin_url: window.location.origin
+          origin_url: window.location.origin,
+          currency: selectedCurrency
         })
       });
       
