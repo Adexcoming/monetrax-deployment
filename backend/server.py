@@ -1297,10 +1297,14 @@ async def create_transaction(data: TransactionCreate, user: dict = Depends(get_c
     
     transaction_id = generate_id("txn")
     
-    # Calculate VAT
+    # Check VAT exemption and calculate VAT
     vat_amount = 0
+    vat_exempt = False
     if data.is_taxable:
-        vat_amount = calculate_vat(data.amount, data.type == "income")
+        # Check if item is VAT-exempt based on category or description
+        vat_exempt = is_vat_exempt(data.category, data.description)
+        if not vat_exempt:
+            vat_amount = calculate_vat(data.amount, data.type == "income", data.category, data.description)
     
     transaction = {
         "transaction_id": transaction_id,
@@ -1310,7 +1314,8 @@ async def create_transaction(data: TransactionCreate, user: dict = Depends(get_c
         "amount": data.amount,
         "description": data.description,
         "date": data.date or now.strftime("%Y-%m-%d"),
-        "is_taxable": data.is_taxable,
+        "is_taxable": data.is_taxable and not vat_exempt,
+        "vat_exempt": vat_exempt,
         "vat_amount": vat_amount,
         "payment_method": data.payment_method or "Cash",
         "created_at": now.isoformat()
