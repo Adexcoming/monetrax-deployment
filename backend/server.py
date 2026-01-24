@@ -2504,6 +2504,7 @@ class CreateCheckoutRequest(BaseModel):
     tier: str
     billing_cycle: str = "monthly"  # monthly or yearly
     origin_url: str
+    currency: str = "NGN"  # Default to NGN
 
 
 class SubscriptionResponse(BaseModel):
@@ -2518,16 +2519,48 @@ class SubscriptionResponse(BaseModel):
     stripe_subscription_id: Optional[str] = None
 
 
+@app.get("/api/currencies")
+async def get_supported_currencies():
+    """Get list of supported currencies with exchange rates"""
+    currencies = []
+    for code, data in CURRENCY_RATES.items():
+        currencies.append({
+            "code": code,
+            "symbol": data["symbol"],
+            "name": data["name"],
+            "rate_to_ngn": data["rate"]
+        })
+    return {"currencies": currencies, "base_currency": "NGN"}
+
+
 @app.get("/api/subscriptions/plans")
-async def get_subscription_plans():
-    """Get all available subscription plans"""
+async def get_subscription_plans(currency: str = "NGN"):
+    """Get all available subscription plans with prices in specified currency"""
     plans = []
+    currency_data = CURRENCY_RATES.get(currency, CURRENCY_RATES["NGN"])
+    
     for tier_id, tier_data in SUBSCRIPTION_TIERS.items():
+        # Convert prices to selected currency
+        price_monthly_ngn = tier_data["price_monthly"]
+        price_yearly_ngn = tier_data["price_yearly"]
+        
+        price_monthly = convert_currency(price_monthly_ngn, currency) if currency != "NGN" else price_monthly_ngn
+        price_yearly = convert_currency(price_yearly_ngn, currency) if currency != "NGN" else price_yearly_ngn
+        
         plans.append({
             "tier": tier_id,
-            **tier_data
+            "name": tier_data["name"],
+            "price_monthly": price_monthly,
+            "price_yearly": price_yearly,
+            "price_monthly_ngn": price_monthly_ngn,
+            "price_yearly_ngn": price_yearly_ngn,
+            "currency": currency,
+            "currency_symbol": currency_data["symbol"],
+            "features": tier_data["features"],
+            "description": tier_data["description"],
+            "highlight": tier_data["highlight"]
         })
-    return {"plans": plans}
+    return {"plans": plans, "currency": currency, "currency_symbol": currency_data["symbol"]}
 
 
 @app.get("/api/subscriptions/current")
