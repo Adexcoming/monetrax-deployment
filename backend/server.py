@@ -1442,6 +1442,38 @@ async def get_financial_summary(
 
 # ============== TAX ROUTES ==============
 
+@app.get("/api/tax/vat-exempt-categories")
+async def get_vat_exempt_categories():
+    """Get list of VAT-exempt categories and keywords for compliance"""
+    return {
+        "exempt_categories": list(VAT_EXEMPT_CATEGORIES.keys()),
+        "exempt_keywords": VAT_EXEMPT_KEYWORDS,
+        "income_tax_exempt": list(INCOME_TAX_EXEMPT_CATEGORIES.keys()),
+        "vat_rate": VAT_RATE,
+        "note": "These categories are exempt from VAT under Nigerian tax law. Transactions matching these categories or keywords will not have VAT applied."
+    }
+
+
+@app.post("/api/tax/check-exemption")
+async def check_tax_exemption(category: str = None, description: str = None):
+    """Check if a transaction would be VAT or income tax exempt"""
+    vat_exempt = is_vat_exempt(category, description)
+    income_tax_exempt = is_income_tax_exempt(category)
+    
+    matched_keywords = []
+    if description:
+        description_lower = description.lower()
+        matched_keywords = [kw for kw in VAT_EXEMPT_KEYWORDS if kw in description_lower]
+    
+    return {
+        "vat_exempt": vat_exempt,
+        "income_tax_exempt": income_tax_exempt,
+        "category_exempt": category in VAT_EXEMPT_CATEGORIES if category else False,
+        "matched_keywords": matched_keywords,
+        "vat_rate": 0 if vat_exempt else VAT_RATE
+    }
+
+
 @app.get("/api/tax/summary")
 async def get_tax_summary(year: int = None, user: dict = Depends(get_current_user)):
     business = await get_user_business(user["user_id"])
