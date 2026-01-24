@@ -171,6 +171,26 @@ Monetrax is now available as a PWA that can be installed on both Android and iOS
 - ✅ Frontend: /bank route with BankAccounts component
 - ✅ "Coming Soon" state when Mono keys not configured
 
+### Multi-Currency Support (NEW - Jan 24, 2026)
+- ✅ Support for 12 currencies: NGN, USD, GBP, EUR, CAD, AUD, GHS, KES, ZAR, INR, AED, CNY
+- ✅ Currency selector on subscription page
+- ✅ Real-time price conversion based on NGN rates
+- ✅ Stripe checkout supports USD, EUR, GBP, CAD, AUD
+- ✅ Shows NGN equivalent for international users
+
+### VAT/Tax Exemption Compliance (NEW - Jan 24, 2026)
+- ✅ 37 VAT-exempt categories based on Nigerian tax law
+- ✅ 62 exempt keywords for auto-detection
+- ✅ Categories include: Basic Food, Medical, Education, Agriculture, Energy, Transport, Real Estate, Financial Services
+- ✅ Auto-detect exempt transactions from description
+- ✅ API endpoint for checking exemption status
+- ✅ Income tax exemption categories (Pension, Insurance, etc.)
+- ✅ Transactions correctly exclude VAT for exempt items
+
+### OTP Message Fix (Jan 24, 2026)
+- ✅ Removed "Developer OTP" wording from phone verification
+- ✅ Shows "Your verification code" instead
+
 ### Updated Subscription Pricing (Jan 23, 2026)
 - ✅ Free: ₦0/month
 - ✅ Starter: ₦3,000/month (was ₦5,000)
