@@ -673,9 +673,9 @@ function AuthModal({ isOpen, onClose, mode, setMode, method, setMethod, onGoogle
       setOtpSent(true);
       setIsNewPhoneUser(result.is_new_user);
       toast.success('OTP sent to your phone');
-      // For development: show OTP in toast
-      if (result.dev_otp) {
-        toast.info(`Development OTP: ${result.dev_otp}`, { duration: 10000 });
+      // For testing: show OTP in toast (remove in production when SMS is integrated)
+      if (result.test_otp) {
+        toast.info(`Your verification code: ${result.test_otp}`, { duration: 15000 });
       }
     } catch (error) {
       toast.error(error.message);
