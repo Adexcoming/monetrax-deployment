@@ -778,18 +778,18 @@ async def phone_send_otp(data: PhoneSendOTPRequest):
     }
     
     # NOTE: In production, integrate with SMS provider like Twilio or Termii
-    # For now, we'll log the OTP (remove in production!)
-    logger.info(f"OTP for {phone}: {otp} (Development only - remove in production)")
+    # For now, we'll return the OTP in response for testing
+    logger.info(f"OTP generated for {phone}: {otp}")
     
     # Check if user exists for this phone
     existing_user = await users_collection.find_one({"phone": phone}, {"_id": 0})
     
     return {
-        "message": "OTP sent successfully",
+        "message": "OTP sent successfully. Please check your phone.",
         "phone": phone,
         "is_new_user": existing_user is None,
-        # Remove this in production - only for testing!
-        "dev_otp": otp
+        # For testing only - remove in production when SMS is integrated
+        "test_otp": otp
     }
 
 
