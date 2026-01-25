@@ -1361,17 +1361,22 @@ function DashboardPage() {
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showBusinessSetup, setShowBusinessSetup] = useState(false);
+  const [dataLoaded, setDataLoaded] = useState(false);
 
   useEffect(() => {
     fetchData();
   }, []);
 
-  // Auto-close business setup modal when business is created
+  // Only show business setup modal after data is loaded AND business is null
   useEffect(() => {
-    if (business) {
-      setShowBusinessSetup(false);
+    if (dataLoaded) {
+      if (business) {
+        setShowBusinessSetup(false);
+      } else {
+        setShowBusinessSetup(true);
+      }
     }
-  }, [business]);
+  }, [business, dataLoaded]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -1382,14 +1387,11 @@ function DashboardPage() {
       ]);
       setSummary(summaryData);
       setTransactions(txData);
-      
-      if (!business) {
-        setShowBusinessSetup(true);
-      }
     } catch (error) {
       console.error('Failed to fetch data:', error);
     } finally {
       setLoading(false);
+      setDataLoaded(true);
     }
   };
 
