@@ -633,7 +633,7 @@ function AuthModal({ isOpen, onClose, mode, setMode, method, setMethod, onGoogle
         method: 'POST',
         body: JSON.stringify({ email, password, name })
       });
-      login(result);
+      await login(result);
       toast.success('Account created successfully!');
       onClose();
       navigate('/dashboard');
@@ -658,7 +658,7 @@ function AuthModal({ isOpen, onClose, mode, setMode, method, setMethod, onGoogle
         method: 'POST',
         body: JSON.stringify({ email, password })
       });
-      login(result);
+      await login(result);
       toast.success(`Welcome back, ${result.name}!`);
       if (['admin', 'superadmin'].includes(result.role)) {
         navigate('/admin');
