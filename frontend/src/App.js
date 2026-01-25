@@ -255,14 +255,31 @@ function AuthProvider({ children }) {
     }
   };
 
-  const login = (userData) => {
+  const login = async (userData) => {
     setUser(userData);
     setMfaRequired(userData.mfa_enabled && !userData.mfa_verified);
+    
+    // Fetch business data for existing users
+    try {
+      const bizData = await api('/api/business');
+      setBusiness(bizData);
+    } catch {
+      // User doesn't have a business yet (new user)
+      setBusiness(null);
+    }
   };
 
-  const completeMfa = (userData) => {
+  const completeMfa = async (userData) => {
     setUser(userData);
     setMfaRequired(false);
+    
+    // Fetch business data after MFA completion
+    try {
+      const bizData = await api('/api/business');
+      setBusiness(bizData);
+    } catch {
+      setBusiness(null);
+    }
   };
 
   const logout = async () => {
