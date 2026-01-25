@@ -1105,7 +1105,7 @@ function AuthCallback() {
           body: JSON.stringify({ session_id: sessionId }),
         });
 
-        login(userData);
+        await login(userData);
         
         if (userData.mfa_enabled && !userData.mfa_verified) {
           navigate('/mfa-verify', { state: { user: userData } });
