@@ -721,7 +721,7 @@ function AuthModal({ isOpen, onClose, mode, setMode, method, setMethod, onGoogle
         setIsNewPhoneUser(true);
         toast.success('Phone verified! Please enter your name.');
       } else {
-        login(result);
+        await login(result);
         toast.success(`Welcome back, ${result.name}!`);
         if (['admin', 'superadmin'].includes(result.role)) {
           navigate('/admin');
@@ -751,7 +751,7 @@ function AuthModal({ isOpen, onClose, mode, setMode, method, setMethod, onGoogle
         method: 'POST',
         body: JSON.stringify({ temp_token: tempToken, name })
       });
-      login(result);
+      await login(result);
       toast.success('Account created successfully!');
       onClose();
       navigate('/dashboard');
